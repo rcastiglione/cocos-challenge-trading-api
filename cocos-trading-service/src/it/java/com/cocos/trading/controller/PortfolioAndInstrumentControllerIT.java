@@ -54,6 +54,7 @@ class PortfolioAndInstrumentControllerIT extends TradingApplicationIT {
         userRepository.deleteAll();
 
         savedUser = userRepository.save(new UserJpaEntity(null, "emiliano@test.com", "10001"));
+        // Explicitly insert the mandatory 'MONEDA' (ARS) instrument required by TransferOrder / AccountLedger logic
         InstrumentJpaEntity arsInstrument = instrumentRepository.save(
                 new InstrumentJpaEntity(null, "ARS", "PESOS", InstrumentType.MONEDA)
         );

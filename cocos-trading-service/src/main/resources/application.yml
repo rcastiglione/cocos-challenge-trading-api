@@ -1,31 +1,19 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:
     name: cocos-trading-service
-  datasource:
-    # TODO: move to secrets / environment variables before production deployment
-    url: jdbc:postgresql://ep-dark-cloud-be97dqg9-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require&channelBinding=require
-    # TODO: move to secrets / environment variables before production deployment
-    username: neondb_owner
-    # TODO: move to secrets / environment variables before production deployment
-    password: npg_VGl0rgp7sklR
-    driver-class-name: org.postgresql.Driver
+  profiles:
+    default: local
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: none
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
 
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
   api-docs:
     path: /v3/api-docs
-

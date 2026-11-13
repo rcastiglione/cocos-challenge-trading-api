@@ -31,8 +31,10 @@
         <springdoc-openapi.version>2.5.0</springdoc-openapi.version>
         <zalando-problem.version>0.29.1</zalando-problem.version>
         <logstash-logback.version>7.4</logstash-logback.version>
-        <jacoco.version>0.8.12</jacoco.version>
+        <jacoco.version>0.8.15</jacoco.version>
         <build-helper.version>3.6.0</build-helper.version>
+        <testcontainers.version>1.21.1</testcontainers.version>
+        <lombok.version>1.18.38</lombok.version>
     </properties>
 
     <dependencyManagement>

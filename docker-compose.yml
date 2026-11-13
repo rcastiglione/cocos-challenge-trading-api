@@ -1,7 +1,48 @@
 services:
+  cocos-postgres:
+    image: postgres:16-alpine
+    container_name: cocos-postgres
+    environment:
+      POSTGRES_DB: cocos_trading
+      POSTGRES_USER: cocos_user
+      POSTGRES_PASSWORD: cocos_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cocos_user -d cocos_trading"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cocos-network
+
   cocos-trading-api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cocos-trading-api
+    depends_on:
+      cocos-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_HOST: cocos-postgres
+      DB_PORT: 5432
+      DB_NAME: cocos_trading
+      DB_USERNAME: cocos_user
+      DB_PASSWORD: cocos_password
     ports:
       - "8080:8080"
     stop_grace_period: 1s
+    networks:
+      - cocos-network
 
+volumes:
+  postgres_data:
+
+networks:
+  cocos-network:
+    driver: bridge

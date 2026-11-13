@@ -9,10 +9,10 @@ Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, 
 - **Java 21** (*Records*, *Pattern Matching*, *Switch Expressions*)
 - **Spring Boot 3.3.0** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-validation`)
 - **Lombok** (`@SuperBuilder`, `@Builder`, `@Getter`, `@RequiredArgsConstructor`, `@Slf4j`) para reducir *boilerplate* en modelos de dominio, *DTOs*, *JPA Entities* y servicios
-- **PostgreSQL** (NeonDB cloud PostgreSQL para *runtime*; base de datos en memoria **H2** para *functional integration testing* aislado)
+- **PostgreSQL 16** (NeonDB cloud PostgreSQL para el perfil `prod`, **Docker Compose** para desarrollo `local`, y **Testcontainers (`PostgreSQLContainer`)** para *functional integration testing* con paridad 100% de motor de base de datos)
 - **Zalando Problem (`problem-spring-web-starter`)** para respuestas de error estandarizadas bajo **RFC 7807**
 - **SpringDoc OpenAPI 2.5 (Swagger UI)** para documentación interactiva de los *endpoints*
-- **Maven (Multi-Module)** con **Surefire** (*unit tests*), **Failsafe** (`src/it` *integration tests*), y **JaCoCo** (*code coverage*)
+- **Maven (Multi-Module)** con **Surefire** (*unit tests*), **Failsafe** (`src/it` *integration tests* con Testcontainers), y **JaCoCo** (*code coverage*)
 
 ---
 
@@ -23,6 +23,9 @@ El repositorio está estructurado en dos módulos Maven para desacoplar completa
 ```text
 cocos-challenge-trading-api/
 ├── pom.xml                                  # Parent / Aggregator POM
+├── Dockerfile                               # Multi-stage Dockerfile (Maven Builder + Corretto 21 Alpine Runtime)
+├── docker-compose.yml                       # Orquestación local (PostgreSQL 16 + Trading API)
+├── docker/postgres/init.sql                 # DDL Schema + Seed Data inicial para PostgreSQL local
 ├── cocos-trading-contract/                  # Submódulo 1: Pure Framework-Agnostic API Contract (DTOs, *ContractApi, Enums)
 └── cocos-trading-service/                   # Submódulo 2: Core Trading Engine Service
     └── src/
@@ -32,8 +35,15 @@ cocos-challenge-trading-api/
         │   ├── controller/                  # REST Controllers, Spring Validators (@InitBinder), ApiMapper & GlobalExceptionHandler
         │   ├── repository/                  # JPA Adapters, JPA Entities, PersistenceMapper & Spring Data Specifications
         │   └── config/                      # Configuración de OpenAPI / Swagger
+        ├── main/resources/
+        │   ├── application.yml              # Configuración base agnóstica de entorno (default profile: local)
+        │   ├── application-local.yml        # Perfil 'local' (Docker PostgreSQL)
+        │   └── application-prod.yml         # Perfil 'prod' (NeonDB Cloud PostgreSQL)
         ├── test/java/com/cocos/trading/     # Unit Tests (JUnit 5 + Mockito)
-        └── it/java/com/cocos/trading/       # Functional Integration Tests (@SpringBootTest + MockMvc)
+        └── it/
+            ├── java/com/cocos/trading/      # Functional Integration Tests (@SpringBootTest + MockMvc + Testcontainers)
+            └── resources/
+                └── application-test.yml     # Perfil 'test' (Testcontainers PostgreSQL + Hibernate create-drop)
 ```
 
 ---
@@ -101,22 +111,47 @@ cocos-challenge-trading-api/
 
 ---
 
-## 4. Cómo Compilar, Ejecutar Tests y Correr Localmente
+## 4. Estrategia de Entornos (`Spring Profiles`), Docker & Testing
 
-### Ejecutar Unit Tests & Functional Integration Tests
+La aplicación implementa tres perfiles de Spring Boot para garantizar aislamiento y paridad total de motor PostgreSQL entre pruebas de integración, desarrollo local y producción:
+
+| Perfil | Archivo de Configuración | Base de Datos | Uso / Activación |
+| :--- | :--- | :--- | :--- |
+| **`local`** *(default)* | `application-local.yml` | **PostgreSQL 16 Local** (`docker-compose.yml`) con esquema y *seed data* inicializados vía `docker/postgres/init.sql` (`ddl-auto: validate`). | Activo por defecto al levantar con Docker Compose o desde el IDE/Maven sin argumentos adicionales. |
+| **`test`** | `application-test.yml` | **Testcontainers (`postgres:16-alpine`)** efímero gestionado automáticamente con `@ServiceConnection` (`ddl-auto: create-drop`). | Se activa automáticamente vía `@ActiveProfiles("test")` en `TradingApplicationIT` al correr `mvn clean verify`. |
+| **`prod`** | `application-prod.yml` | **NeonDB Cloud PostgreSQL** (instancia remota provista en el challenge, `ddl-auto: none`). | Activar mediante `SPRING_PROFILES_ACTIVE=prod` o `-Dspring-boot.run.profiles=prod`. |
+
+### 4.1. Ejecutar Unit Tests & Functional Integration Tests (Testcontainers)
+> **Requisito**: Tener **Docker** corriendo localmente para que Testcontainers pueda levantar el contenedor efímero `postgres:16-alpine`.
+
 ```bash
 mvn clean verify
 ```
 - **Unit tests** (`*Test.java` en `src/test/java`) se ejecutan vía `maven-surefire-plugin`.
-- **Functional integration tests** (`*IT.java` en `src/it/java`) se ejecutan vía `maven-failsafe-plugin` contra una base de datos H2 en memoria aislada.
+- **Functional integration tests** (`*IT.java` en `src/it/java`) se ejecutan vía `maven-failsafe-plugin` contra un contenedor real de PostgreSQL 16 gestionado por **Testcontainers**.
 - **Reporte de cobertura JaCoCo**: Se genera automáticamente en `cocos-trading-service/target/site/jacoco/index.html`.
 
-### Levantar la Aplicación Localmente
+### 4.2. Levantar el Entorno Completo con Docker Compose (Perfil `local`)
+Para compilar la imagen multi-stage de la API y levantar tanto PostgreSQL 16 (pre-cargado con `docker/postgres/init.sql`) como el servicio en un solo paso:
 ```bash
+docker compose up --build
+```
+
+Si preferís correr únicamente la base de datos PostgreSQL en Docker y ejecutar la aplicación desde tu IDE o Maven en tu máquina host (perfil `local` por defecto):
+```bash
+# 1. Levantar solo el contenedor de PostgreSQL local en background
+docker compose up -d cocos-postgres
+
+# 2. Correr la aplicación conectada al Postgres local (perfil 'local' por defecto)
 mvn -pl cocos-trading-service spring-boot:run
 ```
 
-### Documentación Interactiva (Swagger UI & Postman)
+### 4.3. Levantar la Aplicación contra NeonDB (Perfil `prod`)
+```bash
+mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=prod
+```
+
+### 4.4. Documentación Interactiva (Swagger UI & Postman)
 Una vez iniciada la aplicación:
 - **Swagger UI**: `http://localhost:8080/swagger-ui.html`
 - **OpenAPI Spec**: `http://localhost:8080/v3/api-docs`
@@ -200,5 +235,5 @@ curl --location 'http://localhost:8080/orders' \
 ### 4. Cancelar una Orden Pendiente (`POST /orders/{orderId}/cancel`)
 Solo las órdenes con estado `NEW` pueden ser transicionadas a `CANCELLED`:
 ```bash
-curl --location --request POST 'http://localhost:8080/orders/105/cancel'
+curl --location --request POST 'http://localhost:8080/orders/5/cancel'
 ```
