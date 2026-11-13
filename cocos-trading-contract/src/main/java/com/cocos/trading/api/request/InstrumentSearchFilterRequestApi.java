@@ -1,6 +1,7 @@
 package com.cocos.trading.api.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Builder;
 
 /**
  * Filter criteria for searching market instruments by query (matching ticker and/or name),
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * @param ticker Optional ticker filter (case-insensitive substring match).
  * @param name   Optional instrument name filter (case-insensitive substring match).
  */
+@Builder
 @Schema(description = "Search filter criteria for market instruments")
 public record InstrumentSearchFilterRequestApi(
         @Schema(description = "General search query matching ticker or name", example = "PAMP")

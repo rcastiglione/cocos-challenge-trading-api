@@ -14,6 +14,7 @@ import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.Portfolio;
+import com.cocos.trading.domain.model.TradeOrder;
 import com.cocos.trading.domain.model.User;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,8 +26,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,10 +36,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Calculates a user's total account value, available ARS cash, and equity positions
  * with market valuation, weighted average total return percentage, and daily return percentage.
  */
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class PortfolioService implements GetPortfolioUseCase {
 
-    private static final Logger log = LoggerFactory.getLogger(PortfolioService.class);
     private static final int CURRENCY_SCALE = 2;
     private static final int CALCULATION_SCALE = 6;
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
@@ -47,18 +49,6 @@ public class PortfolioService implements GetPortfolioUseCase {
     private final OrderRepositoryPort orderRepositoryPort;
     private final InstrumentRepositoryPort instrumentRepositoryPort;
     private final MarketDataRepositoryPort marketDataRepositoryPort;
-
-    public PortfolioService(
-            UserRepositoryPort userRepositoryPort,
-            OrderRepositoryPort orderRepositoryPort,
-            InstrumentRepositoryPort instrumentRepositoryPort,
-            MarketDataRepositoryPort marketDataRepositoryPort
-    ) {
-        this.userRepositoryPort = userRepositoryPort;
-        this.orderRepositoryPort = orderRepositoryPort;
-        this.instrumentRepositoryPort = instrumentRepositoryPort;
-        this.marketDataRepositoryPort = marketDataRepositoryPort;
-    }
 
     @Override
     @Transactional(readOnly = true)
@@ -71,7 +61,7 @@ public class PortfolioService implements GetPortfolioUseCase {
         BigDecimal availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
 
         Set<Long> tradedInstrumentIds = filledOrders.stream()
-                .map(Order::instrumentId)
+                .map(Order::getInstrumentId)
                 .collect(Collectors.toSet());
 
         Map<Long, Instrument> instrumentsById = instrumentRepositoryPort.findAllByIds(tradedInstrumentIds).stream()
@@ -87,7 +77,10 @@ public class PortfolioService implements GetPortfolioUseCase {
 
         Map<Long, PositionAccumulator> accumulators = new LinkedHashMap<>();
         for (Order order : filledOrders) {
-            Instrument instrument = instrumentsById.get(order.instrumentId());
+            if (!(order instanceof TradeOrder tradeOrder)) {
+                continue;
+            }
+            Instrument instrument = instrumentsById.get(tradeOrder.getInstrumentId());
             if (instrument == null || instrument.isCurrency()) {
                 continue;
             }
@@ -95,7 +88,7 @@ public class PortfolioService implements GetPortfolioUseCase {
                     instrument.id(),
                     id -> new PositionAccumulator()
             );
-            acc.apply(order);
+            acc.apply(tradeOrder);
         }
 
         List<AssetPosition> positions = new ArrayList<>();
@@ -123,16 +116,16 @@ public class PortfolioService implements GetPortfolioUseCase {
                     ? marketData.calculateDailyReturnPercentage()
                     : BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
 
-            positions.add(new AssetPosition(
-                    instrument.id(),
-                    instrument.ticker(),
-                    instrument.name(),
-                    acc.quantity,
-                    lastPrice,
-                    marketValue,
-                    totalReturnPercentage,
-                    dailyReturnPercentage
-            ));
+            positions.add(AssetPosition.builder()
+                    .instrumentId(instrument.id())
+                    .ticker(instrument.ticker())
+                    .name(instrument.name())
+                    .quantity(acc.quantity)
+                    .lastPrice(lastPrice)
+                    .marketValue(marketValue)
+                    .totalReturnPercentage(totalReturnPercentage)
+                    .dailyReturnPercentage(dailyReturnPercentage)
+                    .build());
 
             totalPositionsValue = totalPositionsValue.add(marketValue);
         }
@@ -142,13 +135,13 @@ public class PortfolioService implements GetPortfolioUseCase {
         BigDecimal totalAccountValue = availableCash.add(totalPositionsValue)
                 .setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
 
-        return new Portfolio(
-                user.id(),
-                user.accountNumber(),
-                totalAccountValue,
-                availableCash,
-                positions
-        );
+        return Portfolio.builder()
+                .userId(user.id())
+                .accountNumber(user.accountNumber())
+                .totalAccountValue(totalAccountValue)
+                .availableCash(availableCash)
+                .positions(positions)
+                .build();
     }
 
     private BigDecimal calculateTotalReturnPercentage(BigDecimal currentPrice, BigDecimal averageCost) {
@@ -169,17 +162,17 @@ public class PortfolioService implements GetPortfolioUseCase {
         private BigDecimal totalCostBasis = BigDecimal.ZERO;
         private BigDecimal averageCost = BigDecimal.ZERO;
 
-        void apply(Order order) {
-            if (order.size() == null || order.size() <= 0 || order.price() == null) {
+        void apply(TradeOrder order) {
+            if (order.getSize() == null || order.getSize() <= 0 || order.getPrice() == null) {
                 return;
             }
-            if (order.side() == OrderSide.BUY) {
-                BigDecimal orderCost = order.price().multiply(BigDecimal.valueOf(order.size()));
+            if (order.getSide() == OrderSide.BUY) {
+                BigDecimal orderCost = order.getPrice().multiply(BigDecimal.valueOf(order.getSize()));
                 totalCostBasis = totalCostBasis.add(orderCost);
-                quantity += order.size();
+                quantity += order.getSize();
                 averageCost = totalCostBasis.divide(BigDecimal.valueOf(quantity), CALCULATION_SCALE, RoundingMode.HALF_UP);
-            } else if (order.side() == OrderSide.SELL) {
-                quantity -= order.size();
+            } else if (order.getSide() == OrderSide.SELL) {
+                quantity -= order.getSize();
                 if (quantity <= 0) {
                     quantity = 0;
                     totalCostBasis = BigDecimal.ZERO;
@@ -191,4 +184,3 @@ public class PortfolioService implements GetPortfolioUseCase {
         }
     }
 }
-

@@ -5,6 +5,7 @@ import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
+import com.cocos.trading.domain.model.TradeOrder;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -48,17 +49,16 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
         int resolvedSize = resolveShareSize(command, executionPrice);
         OrderStatus status = determineStatus(context, executionPrice, resolvedSize);
 
-        return new Order(
-                null,
-                command.instrumentId(),
-                command.userId(),
-                resolvedSize,
-                executionPrice,
-                command.type(),
-                command.side(),
-                status,
-                LocalDateTime.now()
-        );
+        return TradeOrder.builder()
+                .instrumentId(command.instrumentId())
+                .userId(command.userId())
+                .size(resolvedSize)
+                .price(executionPrice)
+                .type(command.type())
+                .side(command.side())
+                .status(status)
+                .datetime(LocalDateTime.now())
+                .build();
     }
 
     private int resolveShareSize(PlaceOrderCommand command, BigDecimal executionPrice) {
@@ -98,4 +98,3 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
         throw new BusinessRuleViolationException("Unsupported order side for equity instrument: " + side);
     }
 }
-

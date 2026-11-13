@@ -13,30 +13,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Application service implementing {@link SearchInstrumentsUseCase}.
  */
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class InstrumentService implements SearchInstrumentsUseCase {
 
-    private static final Logger log = LoggerFactory.getLogger(InstrumentService.class);
     private static final int CURRENCY_SCALE = 2;
 
     private final InstrumentRepositoryPort instrumentRepositoryPort;
     private final MarketDataRepositoryPort marketDataRepositoryPort;
-
-    public InstrumentService(
-            InstrumentRepositoryPort instrumentRepositoryPort,
-            MarketDataRepositoryPort marketDataRepositoryPort
-    ) {
-        this.instrumentRepositoryPort = instrumentRepositoryPort;
-        this.marketDataRepositoryPort = marketDataRepositoryPort;
-    }
 
     @Override
     @Transactional(readOnly = true)
@@ -66,7 +59,12 @@ public class InstrumentService implements SearchInstrumentsUseCase {
             BigDecimal zeroReturn = instrument.isCurrency()
                     ? BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
                     : null;
-            return new InstrumentQuote(instrument, defaultPrice, defaultPrice, zeroReturn);
+            return InstrumentQuote.builder()
+                    .instrument(instrument)
+                    .lastPrice(defaultPrice)
+                    .previousClose(defaultPrice)
+                    .dailyReturnPercentage(zeroReturn)
+                    .build();
         }
         BigDecimal close = marketData.close() != null
                 ? marketData.close().setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
@@ -74,12 +72,11 @@ public class InstrumentService implements SearchInstrumentsUseCase {
         BigDecimal previousClose = marketData.previousClose() != null
                 ? marketData.previousClose().setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
                 : null;
-        return new InstrumentQuote(
-                instrument,
-                close,
-                previousClose,
-                marketData.calculateDailyReturnPercentage()
-        );
+        return InstrumentQuote.builder()
+                .instrument(instrument)
+                .lastPrice(close)
+                .previousClose(previousClose)
+                .dailyReturnPercentage(marketData.calculateDailyReturnPercentage())
+                .build();
     }
 }
-

@@ -5,19 +5,17 @@ import com.cocos.trading.domain.model.User;
 import com.cocos.trading.repository.jpa.SpringDataUserRepository;
 import com.cocos.trading.repository.mapper.PersistenceMapper;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
  * Outbound persistence adapter implementing {@link UserRepositoryPort}.
  */
 @Component
+@RequiredArgsConstructor
 public class UserRepositoryAdapter implements UserRepositoryPort {
 
     private final SpringDataUserRepository springDataUserRepository;
-
-    public UserRepositoryAdapter(SpringDataUserRepository springDataUserRepository) {
-        this.springDataUserRepository = springDataUserRepository;
-    }
 
     @Override
     public Optional<User> findById(Long id) {
@@ -25,4 +23,3 @@ public class UserRepositoryAdapter implements UserRepositoryPort {
                 .map(PersistenceMapper::toDomain);
     }
 }
-

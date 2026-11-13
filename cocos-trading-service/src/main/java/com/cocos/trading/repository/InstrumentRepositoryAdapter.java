@@ -11,6 +11,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
@@ -19,13 +20,10 @@ import org.springframework.stereotype.Component;
  * Outbound persistence adapter implementing {@link InstrumentRepositoryPort}.
  */
 @Component
+@RequiredArgsConstructor
 public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
 
     private final SpringDataInstrumentRepository springDataInstrumentRepository;
-
-    public InstrumentRepositoryAdapter(SpringDataInstrumentRepository springDataInstrumentRepository) {
-        this.springDataInstrumentRepository = springDataInstrumentRepository;
-    }
 
     @Override
     public Optional<Instrument> findById(Long id) {
@@ -52,4 +50,3 @@ public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
                 .toList();
     }
 }
-

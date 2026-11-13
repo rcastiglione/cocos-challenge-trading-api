@@ -1,6 +1,7 @@
 package com.cocos.trading.domain.model;
 
 import java.math.BigDecimal;
+import lombok.Builder;
 
 /**
  * Domain value object representing an active equity position in a user's portfolio.
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
  * @param totalReturnPercentage Total return percentage relative to average cost basis.
  * @param dailyReturnPercentage Daily return percentage relative to previous close.
  */
+@Builder
 public record AssetPosition(
         Long instrumentId,
         String ticker,

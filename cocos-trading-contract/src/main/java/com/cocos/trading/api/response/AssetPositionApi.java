@@ -2,6 +2,7 @@ package com.cocos.trading.api.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import lombok.Builder;
 
 /**
  * API representation of an asset position held within a user's portfolio.
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
  * @param totalReturnPercentage Total return percentage of the position relative to its average cost basis.
  * @param dailyReturnPercentage Daily return percentage based on latest close vs. previousClose.
  */
+@Builder
 @Schema(description = "Asset position within a user's portfolio")
 public record AssetPositionApi(
         @Schema(description = "Instrument ID", example = "47")

@@ -4,6 +4,7 @@ import com.cocos.trading.api.common.OrderSideApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import lombok.Builder;
 
 /**
  * Request payload for submitting a new order to the market.
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
  * @param amount       Optional total investment amount in ARS (used to calculate maximum whole shares).
  * @param price        Target execution price in ARS (required for LIMIT orders; ignored for MARKET orders).
  */
+@Builder
 @Schema(description = "Request payload for submitting a market or limit order")
 public record OrderCreateRequestApi(
         @Schema(description = "User ID placing the order", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)

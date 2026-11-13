@@ -5,19 +5,11 @@ import com.cocos.trading.api.response.OrderApi;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
- * Contract interface for order submission and management.
+ * Framework-agnostic contract interface for order submission and management.
  */
 @Tag(name = "Orders", description = "Operations related to market/limit order routing and cancellation")
-@RequestMapping("/orders")
 public interface OrderContractApi {
 
     /**
@@ -31,11 +23,7 @@ public interface OrderContractApi {
             description = "Places a MARKET or LIMIT order by share quantity (size) or total investment (amount). "
                     + "Insufficient funds or holdings result in a persisted REJECTED order."
     )
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    OrderApi create(
-            @Valid @RequestBody OrderCreateRequestApi createRequest
-    );
+    OrderApi create(OrderCreateRequestApi createRequest);
 
     /**
      * Cancels an existing order if its current status is NEW.
@@ -47,10 +35,8 @@ public interface OrderContractApi {
             summary = "Cancel a pending order",
             description = "Cancels an order that is currently in NEW status"
     )
-    @PostMapping("/{orderId}/cancel")
     OrderApi cancel(
             @Parameter(description = "Order ID to cancel", example = "105", required = true)
-            @PathVariable("orderId") Long orderId
+            Long orderId
     );
 }
-

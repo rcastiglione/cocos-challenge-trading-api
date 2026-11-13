@@ -8,19 +8,17 @@ import com.cocos.trading.repository.jpa.SpringDataOrderRepository;
 import com.cocos.trading.repository.mapper.PersistenceMapper;
 import java.util.List;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
  * Outbound persistence adapter implementing {@link OrderRepositoryPort}.
  */
 @Component
+@RequiredArgsConstructor
 public class OrderRepositoryAdapter implements OrderRepositoryPort {
 
     private final SpringDataOrderRepository springDataOrderRepository;
-
-    public OrderRepositoryAdapter(SpringDataOrderRepository springDataOrderRepository) {
-        this.springDataOrderRepository = springDataOrderRepository;
-    }
 
     @Override
     public Order save(Order order) {
@@ -41,4 +39,3 @@ public class OrderRepositoryAdapter implements OrderRepositoryPort {
                 .toList();
     }
 }
-

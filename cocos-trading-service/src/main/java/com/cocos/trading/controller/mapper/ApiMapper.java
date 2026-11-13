@@ -40,9 +40,13 @@ public final class ApiMapper {
      */
     public static InstrumentSearchQuery toQuery(InstrumentSearchFilterRequestApi filter) {
         if (filter == null) {
-            return new InstrumentSearchQuery(null, null, null);
+            return InstrumentSearchQuery.builder().build();
         }
-        return new InstrumentSearchQuery(filter.query(), filter.ticker(), filter.name());
+        return InstrumentSearchQuery.builder()
+                .query(filter.query())
+                .ticker(filter.ticker())
+                .name(filter.name())
+                .build();
     }
 
     /**
@@ -52,15 +56,15 @@ public final class ApiMapper {
      * @return The application {@link PlaceOrderCommand}.
      */
     public static PlaceOrderCommand toCommand(OrderCreateRequestApi request) {
-        return new PlaceOrderCommand(
-                request.userId(),
-                request.instrumentId(),
-                OrderSide.valueOf(request.side().name()),
-                OrderType.valueOf(request.type().name()),
-                request.size(),
-                request.amount(),
-                request.price()
-        );
+        return PlaceOrderCommand.builder()
+                .userId(request.userId())
+                .instrumentId(request.instrumentId())
+                .side(OrderSide.valueOf(request.side().name()))
+                .type(OrderType.valueOf(request.type().name()))
+                .size(request.size())
+                .amount(request.amount())
+                .price(request.price())
+                .build();
     }
 
     /**
@@ -74,13 +78,13 @@ public final class ApiMapper {
                 .map(ApiMapper::toApi)
                 .toList();
 
-        return new PortfolioApi(
-                portfolio.userId(),
-                portfolio.accountNumber(),
-                portfolio.totalAccountValue(),
-                portfolio.availableCash(),
-                positions
-        );
+        return PortfolioApi.builder()
+                .userId(portfolio.userId())
+                .accountNumber(portfolio.accountNumber())
+                .totalAccountValue(portfolio.totalAccountValue())
+                .availableCash(portfolio.availableCash())
+                .positions(positions)
+                .build();
     }
 
     /**
@@ -90,16 +94,16 @@ public final class ApiMapper {
      * @return The {@link AssetPositionApi} response DTO.
      */
     public static AssetPositionApi toApi(AssetPosition position) {
-        return new AssetPositionApi(
-                position.instrumentId(),
-                position.ticker(),
-                position.name(),
-                position.quantity(),
-                position.lastPrice(),
-                position.marketValue(),
-                position.totalReturnPercentage(),
-                position.dailyReturnPercentage()
-        );
+        return AssetPositionApi.builder()
+                .instrumentId(position.instrumentId())
+                .ticker(position.ticker())
+                .name(position.name())
+                .quantity(position.quantity())
+                .lastPrice(position.lastPrice())
+                .marketValue(position.marketValue())
+                .totalReturnPercentage(position.totalReturnPercentage())
+                .dailyReturnPercentage(position.dailyReturnPercentage())
+                .build();
     }
 
     /**
@@ -109,15 +113,15 @@ public final class ApiMapper {
      * @return The {@link InstrumentApi} response DTO.
      */
     public static InstrumentApi toApi(InstrumentQuote quote) {
-        return new InstrumentApi(
-                quote.instrument().id(),
-                quote.instrument().ticker(),
-                quote.instrument().name(),
-                InstrumentTypeApi.valueOf(quote.instrument().type().name()),
-                quote.lastPrice(),
-                quote.previousClose(),
-                quote.dailyReturnPercentage()
-        );
+        return InstrumentApi.builder()
+                .id(quote.instrument().id())
+                .ticker(quote.instrument().ticker())
+                .name(quote.instrument().name())
+                .type(InstrumentTypeApi.valueOf(quote.instrument().type().name()))
+                .lastPrice(quote.lastPrice())
+                .previousClose(quote.previousClose())
+                .dailyReturnPercentage(quote.dailyReturnPercentage())
+                .build();
     }
 
     /**
@@ -127,17 +131,16 @@ public final class ApiMapper {
      * @return The {@link OrderApi} response DTO.
      */
     public static OrderApi toApi(Order order) {
-        return new OrderApi(
-                order.id(),
-                order.instrumentId(),
-                order.userId(),
-                order.size(),
-                order.price(),
-                OrderTypeApi.valueOf(order.type().name()),
-                OrderSideApi.valueOf(order.side().name()),
-                OrderStatusApi.valueOf(order.status().name()),
-                order.datetime() != null ? order.datetime().format(ISO_DATETIME_FORMATTER) : null
-        );
+        return OrderApi.builder()
+                .id(order.getId())
+                .instrumentId(order.getInstrumentId())
+                .userId(order.getUserId())
+                .size(order.getSize())
+                .price(order.getPrice())
+                .type(OrderTypeApi.valueOf(order.getType().name()))
+                .side(OrderSideApi.valueOf(order.getSide().name()))
+                .status(OrderStatusApi.valueOf(order.getStatus().name()))
+                .datetime(order.getDatetime() != null ? order.getDatetime().format(ISO_DATETIME_FORMATTER) : null)
+                .build();
     }
 }
-

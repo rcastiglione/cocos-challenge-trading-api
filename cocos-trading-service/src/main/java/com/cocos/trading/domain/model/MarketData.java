@@ -3,6 +3,7 @@ package com.cocos.trading.domain.model;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import lombok.Builder;
 
 /**
  * Domain entity representing daily market price data for a specific instrument.
@@ -16,6 +17,7 @@ import java.time.LocalDate;
  * @param previousClose Previous day's closing price in ARS.
  * @param date          Market session date.
  */
+@Builder
 public record MarketData(
         Long id,
         Long instrumentId,

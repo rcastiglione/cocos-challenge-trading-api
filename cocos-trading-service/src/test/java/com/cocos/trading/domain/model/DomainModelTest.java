@@ -1,14 +1,19 @@
 package com.cocos.trading.domain.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.mapper.PersistenceMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("Domain Models Unit Tests")
+@DisplayName("Domain Models & Polymorphism Unit Tests")
 class DomainModelTest {
 
     @Test
@@ -29,39 +34,99 @@ class DomainModelTest {
     @Test
     @DisplayName("Should calculate daily return percentage accurately from close and previousClose")
     void shouldCalculateDailyReturnPercentage() {
-        MarketData marketData = new MarketData(
-                1L,
-                47L,
-                new BigDecimal("950.00"),
-                new BigDecimal("900.00"),
-                new BigDecimal("910.00"),
-                new BigDecimal("925.85"),
-                new BigDecimal("906.35"),
-                LocalDate.of(2024, 7, 15)
-        );
+        MarketData marketData = MarketData.builder()
+                .id(1L)
+                .instrumentId(47L)
+                .high(new BigDecimal("950.00"))
+                .low(new BigDecimal("900.00"))
+                .open(new BigDecimal("910.00"))
+                .close(new BigDecimal("925.85"))
+                .previousClose(new BigDecimal("906.35"))
+                .date(LocalDate.of(2024, 7, 15))
+                .build();
 
         // ((925.85 - 906.35) / 906.35) * 100 = 2.151486... -> 2.15%
         assertEquals(new BigDecimal("2.15"), marketData.calculateDailyReturnPercentage());
     }
 
     @Test
-    @DisplayName("Should transition NEW order to CANCELLED")
-    void shouldTransitionOrderToCancelled() {
-        Order newOrder = new Order(
-                10L,
-                47L,
-                1L,
-                5,
-                new BigDecimal("900.00"),
-                OrderType.LIMIT,
-                OrderSide.BUY,
-                OrderStatus.NEW,
-                LocalDateTime.now()
-        );
+    @DisplayName("Should transition NEW TradeOrder to CANCELLED preserving TradeOrder type")
+    void shouldTransitionTradeOrderToCancelled() {
+        TradeOrder newOrder = TradeOrder.builder()
+                .id(10L)
+                .instrumentId(47L)
+                .userId(1L)
+                .size(5)
+                .price(new BigDecimal("900.00"))
+                .type(OrderType.LIMIT)
+                .side(OrderSide.BUY)
+                .status(OrderStatus.NEW)
+                .datetime(LocalDateTime.now())
+                .build();
 
         Order cancelled = newOrder.cancel();
-        assertEquals(OrderStatus.CANCELLED, cancelled.status());
+        assertInstanceOf(TradeOrder.class, cancelled);
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
         assertEquals(new BigDecimal("4500.00"), cancelled.getTotalAmount());
+        assertEquals(new BigDecimal("-4500.00"), cancelled.getCashImpact());
+    }
+
+    @Test
+    @DisplayName("Should enforce TradeOrder and TransferOrder side invariants")
+    void shouldEnforceOrderSubclassSideInvariants() {
+        assertThrows(BusinessRuleViolationException.class, () -> TradeOrder.builder()
+                .instrumentId(66L)
+                .userId(1L)
+                .size(1000)
+                .price(BigDecimal.ONE)
+                .type(OrderType.MARKET)
+                .side(OrderSide.CASH_IN)
+                .status(OrderStatus.FILLED)
+                .build());
+
+        assertThrows(BusinessRuleViolationException.class, () -> TransferOrder.builder()
+                .instrumentId(47L)
+                .userId(1L)
+                .size(10)
+                .price(new BigDecimal("900.00"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.BUY)
+                .status(OrderStatus.FILLED)
+                .build());
+    }
+
+    @Test
+    @DisplayName("PersistenceMapper should discriminate OrderJpaEntity into TradeOrder or TransferOrder based on side")
+    void shouldDiscriminateEntityIntoCorrectOrderSubclass() {
+        OrderJpaEntity tradeEntity = OrderJpaEntity.builder()
+                .id(1L)
+                .instrumentId(47L)
+                .userId(1L)
+                .size(10)
+                .price(new BigDecimal("925.85"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.BUY)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.now())
+                .build();
+
+        OrderJpaEntity transferEntity = OrderJpaEntity.builder()
+                .id(2L)
+                .instrumentId(66L)
+                .userId(1L)
+                .size(50000)
+                .price(new BigDecimal("1.00"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.CASH_IN)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.now())
+                .build();
+
+        Order mappedTrade = PersistenceMapper.toDomain(tradeEntity);
+        Order mappedTransfer = PersistenceMapper.toDomain(transferEntity);
+
+        assertInstanceOf(TradeOrder.class, mappedTrade);
+        assertInstanceOf(TransferOrder.class, mappedTransfer);
+        assertEquals(new BigDecimal("50000.00"), mappedTransfer.getCashImpact());
     }
 }
-

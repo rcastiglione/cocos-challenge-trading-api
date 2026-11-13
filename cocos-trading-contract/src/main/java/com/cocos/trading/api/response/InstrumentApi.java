@@ -3,6 +3,7 @@ package com.cocos.trading.api.response;
 import com.cocos.trading.api.common.InstrumentTypeApi;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import lombok.Builder;
 
 /**
  * API representation of a tradable market instrument enriched with latest market data when available.
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
  * @param previousClose         Previous close price in ARS (if market data is available).
  * @param dailyReturnPercentage Daily return percentage (if market data is available).
  */
+@Builder
 @Schema(description = "Financial instrument details")
 public record InstrumentApi(
         @Schema(description = "Instrument ID", example = "47")

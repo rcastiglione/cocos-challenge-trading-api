@@ -2,6 +2,7 @@ package com.cocos.trading.domain.model;
 
 import java.math.BigDecimal;
 import java.util.List;
+import lombok.Builder;
 
 /**
  * Domain read-model representing a user's complete portfolio valuation.
@@ -12,6 +13,7 @@ import java.util.List;
  * @param availableCash     Available ARS cash balance for trading.
  * @param positions         List of active equity positions.
  */
+@Builder
 public record Portfolio(
         Long userId,
         String accountNumber,

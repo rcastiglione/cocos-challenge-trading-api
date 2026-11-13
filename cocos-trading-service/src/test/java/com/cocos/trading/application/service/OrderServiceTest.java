@@ -1,6 +1,7 @@
 package com.cocos.trading.application.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
+import com.cocos.trading.domain.model.TradeOrder;
 import com.cocos.trading.fixture.TradingFixtures;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -83,9 +85,10 @@ class OrderServiceTest {
 
         Order result = orderService.placeOrder(command);
 
-        assertEquals(OrderStatus.FILLED, result.status());
-        assertEquals(10, result.size());
-        assertEquals(new BigDecimal("925.85"), result.price());
+        assertInstanceOf(TradeOrder.class, result);
+        assertEquals(OrderStatus.FILLED, result.getStatus());
+        assertEquals(10, result.getSize());
+        assertEquals(new BigDecimal("925.85"), result.getPrice());
         verify(orderRepositoryPort).save(any(Order.class));
     }
 
@@ -108,9 +111,10 @@ class OrderServiceTest {
 
         Order result = orderService.placeOrder(command);
 
-        assertEquals(OrderStatus.FILLED, result.status());
-        assertEquals(10, result.size());
-        assertEquals(new BigDecimal("925.85"), result.price());
+        assertInstanceOf(TradeOrder.class, result);
+        assertEquals(OrderStatus.FILLED, result.getStatus());
+        assertEquals(10, result.getSize());
+        assertEquals(new BigDecimal("925.85"), result.getPrice());
     }
 
     @Test
@@ -134,22 +138,20 @@ class OrderServiceTest {
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepositoryPort).save(captor.capture());
-        assertEquals(OrderStatus.REJECTED, result.status());
-        assertEquals(OrderStatus.REJECTED, captor.getValue().status());
+        assertEquals(OrderStatus.REJECTED, result.getStatus());
+        assertEquals(OrderStatus.REJECTED, captor.getValue().getStatus());
     }
 
     @Test
     @DisplayName("Should reject and persist as REJECTED when user has insufficient shares for SELL order")
     void shouldRejectOrderWhenInsufficientSharesForSell() {
-        PlaceOrderCommand command = new PlaceOrderCommand(
-                TradingFixtures.DEFAULT_USER_ID,
-                TradingFixtures.PAMP_INSTRUMENT_ID,
-                OrderSide.SELL,
-                OrderType.MARKET,
-                50,
-                null,
-                null
-        );
+        PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .userId(TradingFixtures.DEFAULT_USER_ID)
+                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
+                .side(OrderSide.SELL)
+                .type(OrderType.MARKET)
+                .size(50)
+                .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
@@ -168,22 +170,21 @@ class OrderServiceTest {
 
         Order result = orderService.placeOrder(command);
 
-        assertEquals(OrderStatus.REJECTED, result.status());
-        assertEquals(50, result.size());
+        assertEquals(OrderStatus.REJECTED, result.getStatus());
+        assertEquals(50, result.getSize());
     }
 
     @Test
     @DisplayName("Should persist LIMIT order with status NEW when buying power is sufficient")
     void shouldPersistLimitOrderAsNew() {
-        PlaceOrderCommand command = new PlaceOrderCommand(
-                TradingFixtures.DEFAULT_USER_ID,
-                TradingFixtures.PAMP_INSTRUMENT_ID,
-                OrderSide.BUY,
-                OrderType.LIMIT,
-                10,
-                null,
-                new BigDecimal("900.00")
-        );
+        PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .userId(TradingFixtures.DEFAULT_USER_ID)
+                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
+                .side(OrderSide.BUY)
+                .type(OrderType.LIMIT)
+                .size(10)
+                .price(new BigDecimal("900.00"))
+                .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
@@ -198,30 +199,30 @@ class OrderServiceTest {
 
         Order result = orderService.placeOrder(command);
 
-        assertEquals(OrderStatus.NEW, result.status());
-        assertEquals(10, result.size());
-        assertEquals(new BigDecimal("900.00"), result.price());
+        assertEquals(OrderStatus.NEW, result.getStatus());
+        assertEquals(10, result.getSize());
+        assertEquals(new BigDecimal("900.00"), result.getPrice());
     }
 
     @Test
     @DisplayName("Should cancel order when status is NEW and reject cancellation when status is FILLED")
     void shouldOnlyCancelOrdersWithNewStatus() {
-        Order newOrder = new Order(
-                50L,
-                TradingFixtures.PAMP_INSTRUMENT_ID,
-                TradingFixtures.DEFAULT_USER_ID,
-                10,
-                new BigDecimal("900.00"),
-                OrderType.LIMIT,
-                OrderSide.BUY,
-                OrderStatus.NEW,
-                LocalDateTime.now()
-        );
+        Order newOrder = TradeOrder.builder()
+                .id(50L)
+                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
+                .userId(TradingFixtures.DEFAULT_USER_ID)
+                .size(10)
+                .price(new BigDecimal("900.00"))
+                .type(OrderType.LIMIT)
+                .side(OrderSide.BUY)
+                .status(OrderStatus.NEW)
+                .datetime(LocalDateTime.now())
+                .build();
         when(orderRepositoryPort.findById(50L)).thenReturn(Optional.of(newOrder));
         when(orderRepositoryPort.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Order cancelled = orderService.cancelOrder(50L);
-        assertEquals(OrderStatus.CANCELLED, cancelled.status());
+        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
 
         Order filledOrder = TradingFixtures.filledBuyOrder(51L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "900.00");
         when(orderRepositoryPort.findById(51L)).thenReturn(Optional.of(filledOrder));
@@ -229,4 +230,3 @@ class OrderServiceTest {
         assertThrows(InvalidOrderStateException.class, () -> orderService.cancelOrder(51L));
     }
 }
-

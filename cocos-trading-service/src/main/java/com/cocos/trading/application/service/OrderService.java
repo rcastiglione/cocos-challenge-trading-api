@@ -19,8 +19,8 @@ import com.cocos.trading.domain.model.OrderStatus;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,30 +28,16 @@ import org.springframework.transaction.annotation.Transactional;
  * Application service implementing {@link PlaceOrderUseCase} and {@link CancelOrderUseCase}.
  * Orchestrates order routing via polymorphic {@link OrderExecutionStrategy} implementations.
  */
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
-
-    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
     private final UserRepositoryPort userRepositoryPort;
     private final InstrumentRepositoryPort instrumentRepositoryPort;
     private final MarketDataRepositoryPort marketDataRepositoryPort;
     private final OrderRepositoryPort orderRepositoryPort;
     private final List<OrderExecutionStrategy> executionStrategies;
-
-    public OrderService(
-            UserRepositoryPort userRepositoryPort,
-            InstrumentRepositoryPort instrumentRepositoryPort,
-            MarketDataRepositoryPort marketDataRepositoryPort,
-            OrderRepositoryPort orderRepositoryPort,
-            List<OrderExecutionStrategy> executionStrategies
-    ) {
-        this.userRepositoryPort = userRepositoryPort;
-        this.instrumentRepositoryPort = instrumentRepositoryPort;
-        this.marketDataRepositoryPort = marketDataRepositoryPort;
-        this.orderRepositoryPort = orderRepositoryPort;
-        this.executionStrategies = executionStrategies;
-    }
 
     @Override
     @Transactional
@@ -91,7 +77,7 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         Order savedOrder = orderRepositoryPort.save(evaluatedOrder);
 
         log.info("[order] Order processed and persisted: id={}, status={}, size={}, price={}",
-                savedOrder.id(), savedOrder.status(), savedOrder.size(), savedOrder.price());
+                savedOrder.getId(), savedOrder.getStatus(), savedOrder.getSize(), savedOrder.getPrice());
         return savedOrder;
     }
 
@@ -103,18 +89,17 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         Order existingOrder = orderRepositoryPort.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
 
-        if (existingOrder.status() != OrderStatus.NEW) {
+        if (existingOrder.getStatus() != OrderStatus.NEW) {
             throw new InvalidOrderStateException(
                     orderId,
-                    existingOrder.status(),
-                    String.format("Only orders with status NEW can be cancelled. Current status: %s", existingOrder.status())
+                    existingOrder.getStatus(),
+                    String.format("Only orders with status NEW can be cancelled. Current status: %s", existingOrder.getStatus())
             );
         }
 
         Order cancelledOrder = existingOrder.cancel();
         Order savedOrder = orderRepositoryPort.save(cancelledOrder);
-        log.info("[order] Cancelled orderId={}", savedOrder.id());
+        log.info("[order] Cancelled orderId={}", savedOrder.getId());
         return savedOrder;
     }
 }
-

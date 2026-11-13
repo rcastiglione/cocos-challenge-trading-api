@@ -1,5 +1,7 @@
 package com.cocos.trading.domain.model;
 
+import lombok.Builder;
+
 /**
  * Domain entity representing a tradable financial instrument or currency.
  *
@@ -8,6 +10,7 @@ package com.cocos.trading.domain.model;
  * @param name   Full descriptive name of the instrument.
  * @param type   Type of the instrument ({@link InstrumentType#ACCIONES} or {@link InstrumentType#MONEDA}).
  */
+@Builder
 public record Instrument(
         Long id,
         String ticker,

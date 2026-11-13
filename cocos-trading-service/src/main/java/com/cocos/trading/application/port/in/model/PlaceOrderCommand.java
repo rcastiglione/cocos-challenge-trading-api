@@ -3,6 +3,7 @@ package com.cocos.trading.application.port.in.model;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderType;
 import java.math.BigDecimal;
+import lombok.Builder;
 
 /**
  * Command model encapsulating all parameters required to submit a trading order.
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
  * @param amount       Optional total investment amount in ARS.
  * @param price        Optional target price in ARS (required for {@link OrderType#LIMIT}).
  */
+@Builder
 public record PlaceOrderCommand(
         Long userId,
         Long instrumentId,

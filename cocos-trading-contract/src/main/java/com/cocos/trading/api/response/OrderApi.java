@@ -5,6 +5,7 @@ import com.cocos.trading.api.common.OrderStatusApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import lombok.Builder;
 
 /**
  * API representation of a trading order stored in the platform.
@@ -19,6 +20,7 @@ import java.math.BigDecimal;
  * @param status       Order status (NEW, FILLED, REJECTED, CANCELLED).
  * @param datetime     ISO-8601 formatted timestamp of the order.
  */
+@Builder
 @Schema(description = "Order execution details")
 public record OrderApi(
         @Schema(description = "Order ID", example = "105")

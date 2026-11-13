@@ -4,10 +4,11 @@ import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
 import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.MarketData;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
+import com.cocos.trading.domain.model.TradeOrder;
+import com.cocos.trading.domain.model.TransferOrder;
 import com.cocos.trading.domain.model.User;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -27,125 +28,139 @@ public final class TradingFixtures {
     }
 
     public static User defaultUser() {
-        return new User(DEFAULT_USER_ID, "emiliano@test.com", "10001");
+        return User.builder()
+                .id(DEFAULT_USER_ID)
+                .email("emiliano@test.com")
+                .accountNumber("10001")
+                .build();
     }
 
     public static Instrument arsInstrument() {
-        return new Instrument(ARS_INSTRUMENT_ID, "ARS", "PESOS", InstrumentType.MONEDA);
+        return Instrument.builder()
+                .id(ARS_INSTRUMENT_ID)
+                .ticker("ARS")
+                .name("PESOS")
+                .type(InstrumentType.MONEDA)
+                .build();
     }
 
     public static Instrument pampInstrument() {
-        return new Instrument(PAMP_INSTRUMENT_ID, "PAMP", "Pampa Energía S.A.", InstrumentType.ACCIONES);
+        return Instrument.builder()
+                .id(PAMP_INSTRUMENT_ID)
+                .ticker("PAMP")
+                .name("Pampa Energía S.A.")
+                .type(InstrumentType.ACCIONES)
+                .build();
     }
 
     public static Instrument metrInstrument() {
-        return new Instrument(METR_INSTRUMENT_ID, "METR", "MetroGAS S.A.", InstrumentType.ACCIONES);
+        return Instrument.builder()
+                .id(METR_INSTRUMENT_ID)
+                .ticker("METR")
+                .name("MetroGAS S.A.")
+                .type(InstrumentType.ACCIONES)
+                .build();
     }
 
     public static MarketData pampMarketData() {
-        return new MarketData(
-                100L,
-                PAMP_INSTRUMENT_ID,
-                new BigDecimal("950.00"),
-                new BigDecimal("900.00"),
-                new BigDecimal("910.00"),
-                new BigDecimal("925.85"),
-                new BigDecimal("906.35"),
-                LocalDate.of(2024, 7, 15)
-        );
+        return MarketData.builder()
+                .id(100L)
+                .instrumentId(PAMP_INSTRUMENT_ID)
+                .high(new BigDecimal("950.00"))
+                .low(new BigDecimal("900.00"))
+                .open(new BigDecimal("910.00"))
+                .close(new BigDecimal("925.85"))
+                .previousClose(new BigDecimal("906.35"))
+                .date(LocalDate.of(2024, 7, 15))
+                .build();
     }
 
     public static MarketData metrMarketData() {
-        return new MarketData(
-                101L,
-                METR_INSTRUMENT_ID,
-                new BigDecimal("260.00"),
-                new BigDecimal("240.00"),
-                new BigDecimal("245.00"),
-                new BigDecimal("250.00"),
-                new BigDecimal("250.00"),
-                LocalDate.of(2024, 7, 15)
-        );
+        return MarketData.builder()
+                .id(101L)
+                .instrumentId(METR_INSTRUMENT_ID)
+                .high(new BigDecimal("260.00"))
+                .low(new BigDecimal("240.00"))
+                .open(new BigDecimal("245.00"))
+                .close(new BigDecimal("250.00"))
+                .previousClose(new BigDecimal("250.00"))
+                .date(LocalDate.of(2024, 7, 15))
+                .build();
     }
 
-    public static Order cashInOrder(Long id, int amount) {
-        return new Order(
-                id,
-                ARS_INSTRUMENT_ID,
-                DEFAULT_USER_ID,
-                amount,
-                new BigDecimal("1.00"),
-                OrderType.MARKET,
-                OrderSide.CASH_IN,
-                OrderStatus.FILLED,
-                LocalDateTime.of(2024, 7, 1, 10, 0)
-        );
+    public static TransferOrder cashInOrder(Long id, int amount) {
+        return TransferOrder.builder()
+                .id(id)
+                .instrumentId(ARS_INSTRUMENT_ID)
+                .userId(DEFAULT_USER_ID)
+                .size(amount)
+                .price(new BigDecimal("1.00"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.CASH_IN)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.of(2024, 7, 1, 10, 0))
+                .build();
     }
 
-    public static Order cashOutOrder(Long id, int amount) {
-        return new Order(
-                id,
-                ARS_INSTRUMENT_ID,
-                DEFAULT_USER_ID,
-                amount,
-                new BigDecimal("1.00"),
-                OrderType.MARKET,
-                OrderSide.CASH_OUT,
-                OrderStatus.FILLED,
-                LocalDateTime.of(2024, 7, 2, 10, 0)
-        );
+    public static TransferOrder cashOutOrder(Long id, int amount) {
+        return TransferOrder.builder()
+                .id(id)
+                .instrumentId(ARS_INSTRUMENT_ID)
+                .userId(DEFAULT_USER_ID)
+                .size(amount)
+                .price(new BigDecimal("1.00"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.CASH_OUT)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.of(2024, 7, 2, 10, 0))
+                .build();
     }
 
-    public static Order filledBuyOrder(Long id, Long instrumentId, int size, String price) {
-        return new Order(
-                id,
-                instrumentId,
-                DEFAULT_USER_ID,
-                size,
-                new BigDecimal(price),
-                OrderType.MARKET,
-                OrderSide.BUY,
-                OrderStatus.FILLED,
-                LocalDateTime.of(2024, 7, 5, 11, 0)
-        );
+    public static TradeOrder filledBuyOrder(Long id, Long instrumentId, int size, String price) {
+        return TradeOrder.builder()
+                .id(id)
+                .instrumentId(instrumentId)
+                .userId(DEFAULT_USER_ID)
+                .size(size)
+                .price(new BigDecimal(price))
+                .type(OrderType.MARKET)
+                .side(OrderSide.BUY)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.of(2024, 7, 5, 11, 0))
+                .build();
     }
 
-    public static Order filledSellOrder(Long id, Long instrumentId, int size, String price) {
-        return new Order(
-                id,
-                instrumentId,
-                DEFAULT_USER_ID,
-                size,
-                new BigDecimal(price),
-                OrderType.MARKET,
-                OrderSide.SELL,
-                OrderStatus.FILLED,
-                LocalDateTime.of(2024, 7, 6, 12, 0)
-        );
+    public static TradeOrder filledSellOrder(Long id, Long instrumentId, int size, String price) {
+        return TradeOrder.builder()
+                .id(id)
+                .instrumentId(instrumentId)
+                .userId(DEFAULT_USER_ID)
+                .size(size)
+                .price(new BigDecimal(price))
+                .type(OrderType.MARKET)
+                .side(OrderSide.SELL)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.of(2024, 7, 6, 12, 0))
+                .build();
     }
 
     public static PlaceOrderCommand marketBuyBySize(int size) {
-        return new PlaceOrderCommand(
-                DEFAULT_USER_ID,
-                PAMP_INSTRUMENT_ID,
-                OrderSide.BUY,
-                OrderType.MARKET,
-                size,
-                null,
-                null
-        );
+        return PlaceOrderCommand.builder()
+                .userId(DEFAULT_USER_ID)
+                .instrumentId(PAMP_INSTRUMENT_ID)
+                .side(OrderSide.BUY)
+                .type(OrderType.MARKET)
+                .size(size)
+                .build();
     }
 
     public static PlaceOrderCommand marketBuyByAmount(String amount) {
-        return new PlaceOrderCommand(
-                DEFAULT_USER_ID,
-                PAMP_INSTRUMENT_ID,
-                OrderSide.BUY,
-                OrderType.MARKET,
-                null,
-                new BigDecimal(amount),
-                null
-        );
+        return PlaceOrderCommand.builder()
+                .userId(DEFAULT_USER_ID)
+                .instrumentId(PAMP_INSTRUMENT_ID)
+                .side(OrderSide.BUY)
+                .type(OrderType.MARKET)
+                .amount(new BigDecimal(amount))
+                .build();
     }
 }
-

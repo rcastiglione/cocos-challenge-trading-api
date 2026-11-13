@@ -11,19 +11,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
  * Outbound persistence adapter implementing {@link MarketDataRepositoryPort}.
  */
 @Component
+@RequiredArgsConstructor
 public class MarketDataRepositoryAdapter implements MarketDataRepositoryPort {
 
     private final SpringDataMarketDataRepository springDataMarketDataRepository;
-
-    public MarketDataRepositoryAdapter(SpringDataMarketDataRepository springDataMarketDataRepository) {
-        this.springDataMarketDataRepository = springDataMarketDataRepository;
-    }
 
     @Override
     public Optional<MarketData> findLatestByInstrumentId(Long instrumentId) {
@@ -46,4 +44,3 @@ public class MarketDataRepositoryAdapter implements MarketDataRepositoryPort {
         return latestByInstrument;
     }
 }
-
