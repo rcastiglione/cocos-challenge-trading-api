@@ -116,18 +116,86 @@ cocos-challenge-trading-api/
 
 ---
 
-## 4. Estrategia de Entornos (`Spring Profiles`), Docker & Testing
+### 3.6. Defensive Programming (DB Schema vs Domain)
+- **Contexto & Detección**: Al inspeccionar los metadatos del *schema* PostgreSQL provisto en **NeonDB**, detectamos que la mayoría de las columnas de negocio (`price`, `size`, `side`, `type`, `status`, `datetime` en `orders`; `ticker`, `name`, `type` en `instruments`; `email`, `accountnumber` en `users`; e `instrumentid`, `close`, `previousclose`, `date` en `marketdata`) están configuradas como `NULLABLE` (`is_nullable = YES`) a nivel DDL, a pesar de ser invariantes obligatorios en el dominio financiero.
+- **Decisión Arquitectónica**: Dado que la base de datos remota es compartida y provista por los evaluadores, decidimos **no ejecutar scripts DDL (`ALTER TABLE ... SET NOT NULL`) sobre la infraestructura remota** para evitar alterar el entorno o romper herramientas de evaluación automatizada (*grading suites*). En su lugar, aplicamos **Defensive Programming** reforzando estas restricciones exclusivamente en la capa Java/JPA (`@Column(..., nullable = false)` en `OrderJpaEntity`, `InstrumentJpaEntity`, `UserJpaEntity` y `MarketDataJpaEntity` —dejando `high`, `low` y `open` como *nullable* ya que existen instrumentos sin volumen intradía en el *dataset* real—) junto con invariantes en los constructores de dominio, dejando documentados los `// TODO` correspondientes para una futura migración controlada vía **Flyway / Liquibase**.
 
-La aplicación implementa tres perfiles de Spring Boot para garantizar aislamiento y paridad total de motor PostgreSQL entre pruebas de integración, desarrollo local y producción:
+---
+
+## 4. Estrategia de Entornos (`Spring Profiles`), Inicialización de Base de Datos & Ejecución
+
+La aplicación implementa tres perfiles de Spring Boot para garantizar aislamiento y paridad total de motor PostgreSQL entre pruebas de integración, desarrollo local y la base en la nube del challenge:
 
 | Perfil | Archivo de Configuración | Base de Datos | Uso / Activación |
 | :--- | :--- | :--- | :--- |
-| **`local`** *(default)* | `application-local.yml` | **PostgreSQL 16 Local** (`docker-compose.yml`) con esquema y *seed data* inicializados vía `docker/postgres/init.sql` (`ddl-auto: validate`). | Activo por defecto al levantar con Docker Compose o desde el IDE/Maven sin argumentos adicionales. |
+| **`local`** *(default)* | `application-local.yml` | **PostgreSQL 16 Local** (`localhost:5432/cocos_trading`) levantado vía `docker-compose.yml` y populado automáticamente con `docker/postgres/init.sql` (`ddl-auto: validate`). | Activo por defecto (`SPRING_PROFILES_ACTIVE=local`) al levantar con Docker Compose o desde Maven/IDE. |
+| **`prod`** | `application-prod.yml` | **NeonDB Cloud PostgreSQL** (`ep-dark-cloud-be97dqg9-pooler.c-9.us-east-2.aws.neon.tech:5432/neondb`, `ddl-auto: none`). | Activar mediante `-Dspring-boot.run.profiles=prod` o variable de entorno `SPRING_PROFILES_ACTIVE=prod`. |
 | **`test`** | `application-test.yml` | **Testcontainers (`postgres:16-alpine`)** efímero gestionado automáticamente con `@ServiceConnection` (`ddl-auto: create-drop`). | Se activa automáticamente vía `@ActiveProfiles("test")` en `TradingApplicationIT` al correr `mvn clean verify`. |
-| **`prod`** | `application-prod.yml` | **NeonDB Cloud PostgreSQL** (instancia remota provista en el challenge, `ddl-auto: none`). | Activar mediante `SPRING_PROFILES_ACTIVE=prod` o `-Dspring-boot.run.profiles=prod`. |
 
-### 4.1. Ejecutar Unit Tests & Functional Integration Tests (Testcontainers)
-> **Requisito**: Tener **Docker** corriendo localmente para que Testcontainers pueda levantar el contenedor efímero `postgres:16-alpine`.
+---
+
+### 4.1. Inicialización Automática de la Base de Datos Local (`docker/postgres/init.sql`)
+Cuando se levanta el contenedor `cocos-postgres` por primera vez mediante Docker Compose, la imagen oficial `postgres:16-alpine` ejecuta automáticamente el script montado en `/docker-entrypoint-initdb.d/init.sql` (`docker/postgres/init.sql`).
+
+Este script crea el esquema relacional y popula la base local con un **espejo exacto (1:1) de los datos reales de la base NeonDB del challenge**:
+- **`users` (4 registros)**: Usuarios de prueba (`id=1` `emiliano@test.com` al `id=4` `juan@test.com`).
+- **`instruments` (66 registros)**: Los 65 activos bursátiles tipo `ACCIONES` (ej. `31=BMA`, `42=MOLI`, `45=LOMA`, `47=PAMP`, `54=METR`, `61=ALUA`) y el instrumento `66=ARS` (`PESOS`, tipo `MONEDA`).
+- **`marketdata` (126 registros)**: Cotizaciones históricas reales (`high`, `low`, `open`, `close`, `previousclose`) de las jornadas `2023-07-13` y `2023-07-14`.
+- **`orders` (11 registros)**: Libro mayor inicial para `userId=1` con órdenes `CASH_IN`, `CASH_OUT`, `BUY` y `SELL` en estados `FILLED`, `NEW`, `CANCELLED` y `REJECTED`.
+- **Sincronización de Secuencias**: Al finalizar los `INSERT`, ejecuta `setval(pg_get_serial_sequence(...))` en las 4 tablas para que las nuevas órdenes creadas vía `POST /orders` continúen con el siguiente `id` correlativo (`id=12`, `13`, etc.) sin colisionar con los datos iniciales.
+
+> **¿Cómo resetear la base local a su estado inicial?**
+> Dado que PostgreSQL solo ejecuta `/docker-entrypoint-initdb.d/init.sql` cuando el volumen de datos está vacío, si realizaste pruebas locales y querés volver a popular la base desde cero con los datos originales de `init.sql`, ejecutá:
+> ```bash
+> docker compose down -v
+> docker compose up -d cocos-postgres
+> ```
+
+---
+
+### 4.2. Cómo Levantar en Modo `local` (PostgreSQL Local en Docker)
+
+Tenés dos alternativas para correr el entorno `local`:
+
+#### Opción A: Stack Completo en Docker (API + PostgreSQL + Prometheus + Grafana)
+Compila el proyecto dentro de un *multi-stage Dockerfile* y levanta todos los contenedores orquestados:
+```bash
+docker compose up --build
+```
+
+#### Opción B: Base PostgreSQL en Docker + API corriendo con Maven en tu máquina
+Ideal para desarrollo y debugging local contra el contenedor `cocos-postgres`:
+```bash
+# 1. Instalar los artefactos del proyecto multi-módulo (cocos-trading-contract) en ~/.m2
+mvn clean install -DskipTests
+
+# 2. Levantar únicamente el contenedor de PostgreSQL 16 (ejecuta docker/postgres/init.sql si el volumen es nuevo)
+docker compose up -d cocos-postgres
+
+# 3. Iniciar la API con el perfil 'local' (se conecta a localhost:5432/cocos_trading)
+mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+---
+
+### 4.3. Cómo Levantar en Modo `prod` (Conectado a NeonDB Cloud PostgreSQL)
+Para ejecutar la API localmente en tu máquina pero conectada directamente a la base de datos remota provista por Cocos en **NeonDB** (`ep-dark-cloud-be97dqg9-pooler.c-9.us-east-2.aws.neon.tech`), utilizá el perfil `prod` (definido en `application-prod.yml`):
+
+> **Requisito previo (Maven Multi-Módulo)**: Al ejecutar `spring-boot:run` sobre el submódulo `-pl cocos-trading-service`, Maven resuelve la dependencia `cocos-trading-contract` desde tu repositorio local (`~/.m2/repository`). Ejecutá primero `mvn clean install -DskipTests` desde la raíz del proyecto.
+
+```bash
+# 1. Compilar e instalar el módulo de contrato en ~/.m2 (necesario la primera vez o tras cambios en el contrato)
+mvn clean install -DskipTests
+
+# 2. Iniciar la API con el perfil 'prod' conectada a NeonDB
+mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=prod
+```
+*(Opcionalmente, podés sobrescribir las credenciales de conexión mediante las variables de entorno `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`).*
+
+---
+
+### 4.4. Ejecutar Unit Tests & Functional Integration Tests (Testcontainers)
+> **Requisito**: Tener **Docker** corriendo localmente para que Testcontainers pueda levantar automáticamente el contenedor efímero `postgres:16-alpine` con el perfil `test`.
 
 ```bash
 mvn clean verify
@@ -136,28 +204,10 @@ mvn clean verify
 - **Functional integration tests** (`*IT.java` en `src/it/java`) se ejecutan vía `maven-failsafe-plugin` contra un contenedor real de PostgreSQL 16 gestionado por **Testcontainers**.
 - **Reporte de cobertura JaCoCo**: Se genera automáticamente en `cocos-trading-service/target/site/jacoco/index.html`.
 
-### 4.2. Levantar el Entorno Completo con Docker Compose (Perfil `local`)
-Para compilar la imagen multi-stage de la API y levantar tanto PostgreSQL 16 (pre-cargado con `docker/postgres/init.sql`) como el servicio en un solo paso:
-```bash
-docker compose up --build
-```
+---
 
-Si preferís correr únicamente la base de datos PostgreSQL en Docker y ejecutar la aplicación desde tu IDE o Maven en tu máquina host (perfil `local` por defecto):
-```bash
-# 1. Levantar solo el contenedor de PostgreSQL local en background
-docker compose up -d cocos-postgres
-
-# 2. Correr la aplicación conectada al Postgres local (perfil 'local' por defecto)
-mvn -pl cocos-trading-service spring-boot:run
-```
-
-### 4.3. Levantar la Aplicación contra NeonDB (Perfil `prod`)
-```bash
-mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=prod
-```
-
-### 4.4. Documentación Interactiva (Swagger UI & Postman)
-Una vez iniciada la aplicación:
+### 4.5. Documentación Interactiva (Swagger UI & Postman)
+Una vez iniciada la aplicación (ya sea en `local` o `prod`):
 - **Swagger UI**: `http://localhost:8080/swagger-ui.html`
 - **OpenAPI Spec**: `http://localhost:8080/v3/api-docs`
 - **Postman Collection**: Importar el archivo `cocos-trading-api.postman_collection.json` ubicado en la raíz del repositorio.

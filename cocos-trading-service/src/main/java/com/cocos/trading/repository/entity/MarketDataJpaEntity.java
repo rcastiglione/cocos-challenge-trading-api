@@ -30,7 +30,8 @@ public class MarketDataJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "instrumentid")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "instrumentid", nullable = false)
     private Long instrumentId;
 
     @Column(name = "high")
@@ -42,12 +43,15 @@ public class MarketDataJpaEntity {
     @Column(name = "open")
     private BigDecimal open;
 
-    @Column(name = "close")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "close", nullable = false)
     private BigDecimal close;
 
-    @Column(name = "previousclose")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "previousclose", nullable = false)
     private BigDecimal previousClose;
 
-    @Column(name = "date")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "date", nullable = false)
     private LocalDate date;
 }

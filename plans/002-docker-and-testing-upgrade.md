@@ -119,7 +119,7 @@ Located at `cocos-trading-service/src/main/resources/application-prod.yml`:
 - **Datasource Configuration**:
   - `url: ${DB_URL:jdbc:postgresql://ep-dark-cloud-be97dqg9-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require&channelBinding=require}`
   - `username: ${DB_USERNAME:neondb_owner}`
-  - `password: ${DB_PASSWORD:npg_VGl0rgp7sklR}`
+  - `password: ${DB_PASSWORD:npg_VGl0rgp7skIR}`
   - `driver-class-name: org.postgresql.Driver`
 - **JPA Configuration**:
   - `hibernate.ddl-auto: none` (never mutates the external production schema).

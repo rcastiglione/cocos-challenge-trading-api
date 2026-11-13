@@ -35,30 +35,38 @@ public class OrderJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "instrumentid")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "instrumentid", nullable = false)
     private Long instrumentId;
 
-    @Column(name = "userid")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "userid", nullable = false)
     private Long userId;
 
-    @Column(name = "size")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "size", nullable = false)
     private Integer size;
 
-    @Column(name = "price")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "price", nullable = false)
     private BigDecimal price;
 
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Enumerated(EnumType.STRING)
-    @Column(name = "type")
+    @Column(name = "type", nullable = false)
     private OrderType type;
 
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Enumerated(EnumType.STRING)
-    @Column(name = "side")
+    @Column(name = "side", nullable = false)
     private OrderSide side;
 
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Enumerated(EnumType.STRING)
-    @Column(name = "status")
+    @Column(name = "status", nullable = false)
     private OrderStatus status;
 
-    @Column(name = "datetime")
+    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
+    @Column(name = "datetime", nullable = false)
     private LocalDateTime datetime;
 }
