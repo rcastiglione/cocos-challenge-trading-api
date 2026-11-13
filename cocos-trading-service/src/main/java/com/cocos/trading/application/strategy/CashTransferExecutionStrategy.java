@@ -32,7 +32,8 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
         }
 
         int resolvedSize = resolveCashUnits(command);
-        OrderStatus status = determineCashStatus(context, resolvedSize);
+        validateCashWithdrawal(context, resolvedSize);
+        OrderStatus status = resolvedSize > 0 ? OrderStatus.FILLED : OrderStatus.REJECTED;
 
         return TransferOrder.builder()
                 .instrumentId(command.instrumentId())
@@ -56,16 +57,21 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
         return 0;
     }
 
-    private OrderStatus determineCashStatus(OrderExecutionContext context, int resolvedSize) {
-        if (resolvedSize <= 0) {
-            return OrderStatus.REJECTED;
-        }
-        if (context.command().side() == OrderSide.CASH_OUT) {
-            BigDecimal withdrawalAmount = TransferOrder.UNIT_CASH_PRICE.multiply(BigDecimal.valueOf(resolvedSize));
+    private void validateCashWithdrawal(OrderExecutionContext context, int resolvedSize) {
+        PlaceOrderCommand command = context.command();
+        if (command.side() == OrderSide.CASH_OUT) {
+            BigDecimal withdrawalAmount = command.amount() != null && command.amount().compareTo(BigDecimal.ZERO) > 0
+                    ? command.amount()
+                    : TransferOrder.UNIT_CASH_PRICE.multiply(BigDecimal.valueOf(resolvedSize));
             if (context.availableCash().compareTo(withdrawalAmount) < 0) {
-                return OrderStatus.REJECTED;
+                throw new BusinessRuleViolationException(
+                        String.format(
+                                "Insufficient available cash for CASH_OUT transfer: requested=%s ARS, available=%s ARS.",
+                                withdrawalAmount,
+                                context.availableCash()
+                        )
+                );
             }
         }
-        return OrderStatus.FILLED;
     }
 }

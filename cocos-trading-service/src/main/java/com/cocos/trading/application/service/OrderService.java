@@ -16,6 +16,7 @@ import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.MarketData;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderStatus;
+import io.micrometer.core.instrument.Timer;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -26,7 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Application service implementing {@link PlaceOrderUseCase} and {@link CancelOrderUseCase}.
- * Orchestrates order routing via polymorphic {@link OrderExecutionStrategy} implementations.
+ * Orchestrates order routing via polymorphic {@link OrderExecutionStrategy} implementations
+ * and delegates telemetry recording to {@link TradingMetricsService}.
  */
 @Slf4j
 @Service
@@ -38,10 +40,12 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
     private final MarketDataRepositoryPort marketDataRepositoryPort;
     private final OrderRepositoryPort orderRepositoryPort;
     private final List<OrderExecutionStrategy> executionStrategies;
+    private final TradingMetricsService tradingMetricsService;
 
     @Override
     @Transactional
     public Order placeOrder(PlaceOrderCommand command) {
+        Timer.Sample executionSample = tradingMetricsService.startOrderTimer();
         log.info("[order] Placing order from command={}", command);
 
         userRepositoryPort.findById(command.userId())
@@ -76,6 +80,12 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         Order evaluatedOrder = strategy.execute(context);
         Order savedOrder = orderRepositoryPort.save(evaluatedOrder);
 
+        String status = savedOrder.getStatus().name();
+        String type = savedOrder.getType().name();
+        String side = savedOrder.getSide().name();
+        tradingMetricsService.recordOrderProcessed(status, type, side);
+        tradingMetricsService.stopOrderTimer(executionSample, status, type, side);
+
         log.info("[order] Order processed and persisted: id={}, status={}, size={}, price={}",
                 savedOrder.getId(), savedOrder.getStatus(), savedOrder.getSize(), savedOrder.getPrice());
         return savedOrder;
@@ -99,6 +109,13 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
 
         Order cancelledOrder = existingOrder.cancel();
         Order savedOrder = orderRepositoryPort.save(cancelledOrder);
+
+        tradingMetricsService.recordOrderProcessed(
+                savedOrder.getStatus().name(),
+                savedOrder.getType().name(),
+                savedOrder.getSide().name()
+        );
+
         log.info("[order] Cancelled orderId={}", savedOrder.getId());
         return savedOrder;
     }

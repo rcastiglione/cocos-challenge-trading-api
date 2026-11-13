@@ -103,8 +103,13 @@ public class GlobalExceptionHandler implements ProblemHandling {
     @ExceptionHandler(BusinessRuleViolationException.class)
     public ResponseEntity<Problem> handleBusinessRuleViolationException(BusinessRuleViolationException ex) {
         log.warn("Business rule violation: {}", ex.getMessage());
-        return ResponseEntity.badRequest()
-                .body(new BadRequestProblem(ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new BusinessRuleViolationProblem(
+                        "Business Rule Violation",
+                        Status.CONFLICT,
+                        ex.getMessage(),
+                        null
+                ));
     }
 
     @ExceptionHandler(Exception.class)

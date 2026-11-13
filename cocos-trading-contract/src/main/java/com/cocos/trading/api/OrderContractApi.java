@@ -9,7 +9,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 /**
  * Framework-agnostic contract interface for order submission and management.
  */
-@Tag(name = "Orders", description = "Operations related to market/limit order routing and cancellation")
+@Tag(
+        name = "Orders",
+        description = "Operations related to market/limit equity orders (BUY, SELL), cash transfers (CASH_IN, CASH_OUT), and order cancellation"
+)
 public interface OrderContractApi {
 
     /**
@@ -19,9 +22,10 @@ public interface OrderContractApi {
      * @return The persisted {@link OrderApi} reflecting its resulting status (FILLED, NEW, or REJECTED).
      */
     @Operation(
-            summary = "Submit an order to the market",
-            description = "Places a MARKET or LIMIT order by share quantity (size) or total investment (amount). "
-                    + "Insufficient funds or holdings result in a persisted REJECTED order."
+            summary = "Submit an equity order (BUY/SELL) or cash transfer (CASH_IN/CASH_OUT)",
+            description = "Places a MARKET or LIMIT equity order (BUY, SELL) or a cash transfer (CASH_IN, CASH_OUT on MONEDA instruments) "
+                    + "by exact quantity (size) or total ARS amount (amount). Equity orders with insufficient funds/holdings result in a persisted "
+                    + "REJECTED order, while CASH_OUT transfers exceeding availableCash are rejected with a 409 BusinessRuleViolationProblem."
     )
     OrderApi create(OrderCreateRequestApi createRequest);
 

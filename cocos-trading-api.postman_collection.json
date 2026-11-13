@@ -166,6 +166,28 @@
         },
         "description": "Deposits ARS into the user's account using the MONEDA instrument."
       }
+    },
+    {
+      "name": "9. Submit CASH_OUT Transfer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_OUT\",\n  \"type\": \"MARKET\",\n  \"size\": 20000\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Withdraws ARS from the user's account using the MONEDA instrument (validates that requested amount does not exceed availableCash)."
+      }
     }
   ]
 }

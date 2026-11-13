@@ -2,7 +2,9 @@ package com.cocos.trading.application.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,17 +17,28 @@ import com.cocos.trading.application.port.out.UserRepositoryPort;
 import com.cocos.trading.application.strategy.CashTransferExecutionStrategy;
 import com.cocos.trading.application.strategy.LimitOrderExecutionStrategy;
 import com.cocos.trading.application.strategy.MarketOrderExecutionStrategy;
+import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
 import com.cocos.trading.domain.model.TradeOrder;
+import com.cocos.trading.domain.model.TransferOrder;
 import com.cocos.trading.fixture.TradingFixtures;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,10 +63,13 @@ class OrderServiceTest {
     @Mock
     private OrderRepositoryPort orderRepositoryPort;
 
+    private SimpleMeterRegistry meterRegistry;
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
+        TradingMetricsService tradingMetricsService = new TradingMetricsService(meterRegistry);
         orderService = new OrderService(
                 userRepositoryPort,
                 instrumentRepositoryPort,
@@ -63,7 +79,8 @@ class OrderServiceTest {
                         new MarketOrderExecutionStrategy(),
                         new LimitOrderExecutionStrategy(),
                         new CashTransferExecutionStrategy()
-                )
+                ),
+                tradingMetricsService
         );
     }
 
@@ -90,6 +107,18 @@ class OrderServiceTest {
         assertEquals(10, result.getSize());
         assertEquals(new BigDecimal("925.85"), result.getPrice());
         verify(orderRepositoryPort).save(any(Order.class));
+
+        Counter filledCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
+                .tags("status", "FILLED", "type", "MARKET", "side", "BUY")
+                .counter();
+        assertNotNull(filledCounter);
+        assertEquals(1.0, filledCounter.count());
+
+        Timer executionTimer = meterRegistry.find(TradingMetricsService.ORDER_EXECUTION_LATENCY_METRIC)
+                .tags("status", "FILLED", "type", "MARKET", "side", "BUY")
+                .timer();
+        assertNotNull(executionTimer);
+        assertEquals(1L, executionTimer.count());
     }
 
     @Test
@@ -140,6 +169,12 @@ class OrderServiceTest {
         verify(orderRepositoryPort).save(captor.capture());
         assertEquals(OrderStatus.REJECTED, result.getStatus());
         assertEquals(OrderStatus.REJECTED, captor.getValue().getStatus());
+
+        Counter rejectedCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
+                .tags("status", "REJECTED", "type", "MARKET", "side", "BUY")
+                .counter();
+        assertNotNull(rejectedCounter);
+        assertEquals(1.0, rejectedCounter.count());
     }
 
     @Test
@@ -202,6 +237,12 @@ class OrderServiceTest {
         assertEquals(OrderStatus.NEW, result.getStatus());
         assertEquals(10, result.getSize());
         assertEquals(new BigDecimal("900.00"), result.getPrice());
+
+        Counter newCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
+                .tags("status", "NEW", "type", "LIMIT", "side", "BUY")
+                .counter();
+        assertNotNull(newCounter);
+        assertEquals(1.0, newCounter.count());
     }
 
     @Test
@@ -224,9 +265,132 @@ class OrderServiceTest {
         Order cancelled = orderService.cancelOrder(50L);
         assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
 
+        Counter cancelledCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
+                .tags("status", "CANCELLED", "type", "LIMIT", "side", "BUY")
+                .counter();
+        assertNotNull(cancelledCounter);
+        assertEquals(1.0, cancelledCounter.count());
+
         Order filledOrder = TradingFixtures.filledBuyOrder(51L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "900.00");
         when(orderRepositoryPort.findById(51L)).thenReturn(Optional.of(filledOrder));
 
         assertThrows(InvalidOrderStateException.class, () -> orderService.cancelOrder(51L));
+    }
+
+    @Test
+    @DisplayName("Should isolate Timer.Sample per thread and record exact Counter and Timer totals under concurrent load")
+    void shouldMaintainThreadSafetyUnderHighConcurrency() throws Exception {
+        int concurrentRequests = 50;
+        PlaceOrderCommand command = TradingFixtures.marketBuyBySize(10);
+
+        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+                .thenReturn(Optional.of(TradingFixtures.defaultUser()));
+        when(instrumentRepositoryPort.findById(TradingFixtures.PAMP_INSTRUMENT_ID))
+                .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
+        when(marketDataRepositoryPort.findLatestByInstrumentId(TradingFixtures.PAMP_INSTRUMENT_ID))
+                .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
+        when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
+        when(orderRepositoryPort.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CountDownLatch readyLatch = new CountDownLatch(concurrentRequests);
+        CountDownLatch startGate = new CountDownLatch(1);
+        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+        try {
+            List<Future<Order>> futures = new ArrayList<>(concurrentRequests);
+            for (int i = 0; i < concurrentRequests; i++) {
+                futures.add(executor.submit(() -> {
+                    readyLatch.countDown();
+                    startGate.await(5, TimeUnit.SECONDS);
+                    return orderService.placeOrder(command);
+                }));
+            }
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startGate.countDown();
+
+            for (Future<Order> future : futures) {
+                Order order = future.get(5, TimeUnit.SECONDS);
+                assertEquals(OrderStatus.FILLED, order.getStatus());
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        Counter filledCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
+                .tags("status", "FILLED", "type", "MARKET", "side", "BUY")
+                .counter();
+        assertNotNull(filledCounter);
+        assertEquals((double) concurrentRequests, filledCounter.count());
+
+        Timer executionTimer = meterRegistry.find(TradingMetricsService.ORDER_EXECUTION_LATENCY_METRIC)
+                .tags("status", "FILLED", "type", "MARKET", "side", "BUY")
+                .timer();
+        assertNotNull(executionTimer);
+        assertEquals(concurrentRequests, executionTimer.count());
+        assertTrue(executionTimer.totalTime(TimeUnit.NANOSECONDS) > 0);
+    }
+
+    @Test
+    @DisplayName("Should execute CASH_OUT transfer as FILLED when requested amount does not exceed availableCash")
+    void shouldExecuteCashOutTransferSuccessfullyWhenCashIsSufficient() {
+        PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .userId(TradingFixtures.DEFAULT_USER_ID)
+                .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
+                .side(OrderSide.CASH_OUT)
+                .type(OrderType.MARKET)
+                .size(20_000)
+                .build();
+
+        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+                .thenReturn(Optional.of(TradingFixtures.defaultUser()));
+        when(instrumentRepositoryPort.findById(TradingFixtures.ARS_INSTRUMENT_ID))
+                .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
+        when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
+        when(orderRepositoryPort.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = orderService.placeOrder(command);
+
+        assertInstanceOf(TransferOrder.class, result);
+        assertEquals(OrderStatus.FILLED, result.getStatus());
+        assertEquals(OrderSide.CASH_OUT, result.getSide());
+        assertEquals(20_000, result.getSize());
+        assertEquals(new BigDecimal("1.00"), result.getPrice());
+        assertEquals(new BigDecimal("-20000.00"), result.getCashImpact());
+
+        Counter cashOutCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
+                .tags("status", "FILLED", "type", "MARKET", "side", "CASH_OUT")
+                .counter();
+        assertNotNull(cashOutCounter);
+        assertEquals(1.0, cashOutCounter.count());
+    }
+
+    @Test
+    @DisplayName("Should throw BusinessRuleViolationException when CASH_OUT requested amount exceeds availableCash")
+    void shouldThrowBusinessRuleViolationWhenCashOutExceedsAvailableCash() {
+        PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .userId(TradingFixtures.DEFAULT_USER_ID)
+                .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
+                .side(OrderSide.CASH_OUT)
+                .type(OrderType.MARKET)
+                .size(60_000)
+                .build();
+
+        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+                .thenReturn(Optional.of(TradingFixtures.defaultUser()));
+        when(instrumentRepositoryPort.findById(TradingFixtures.ARS_INSTRUMENT_ID))
+                .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
+        when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
+
+        BusinessRuleViolationException exception = assertThrows(
+                BusinessRuleViolationException.class,
+                () -> orderService.placeOrder(command)
+        );
+        assertTrue(exception.getMessage().contains("Insufficient available cash for CASH_OUT transfer"));
     }
 }

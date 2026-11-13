@@ -1,7 +1,10 @@
 package com.cocos.trading.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -251,6 +254,72 @@ class OrderControllerIT extends TradingApplicationIT {
                         .content(objectMapper.writeValueAsString(invalidLimitRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Bad Request"));
+    }
+
+    @Test
+    @DisplayName("Should expose custom business metrics on /actuator/prometheus after processing orders")
+    void shouldExposeCustomMetricsOnActuatorPrometheusEndpoint() throws Exception {
+        OrderCreateRequestApi request = new OrderCreateRequestApi(
+                savedUser.getId(),
+                pampInstrument.getId(),
+                OrderSideApi.BUY,
+                OrderTypeApi.MARKET,
+                5,
+                null,
+                null
+        );
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("FILLED"));
+
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("cocos_orders_processed_total")))
+                .andExpect(content().string(containsString("cocos_orders_execution_latency_seconds")));
+    }
+
+    @Test
+    @DisplayName("Should execute CASH_OUT transfer when funds are sufficient and return BusinessRuleViolationProblem when insufficient")
+    void shouldHandleCashOutTransferAndRejectExcessWithdrawal() throws Exception {
+        // 1. Valid CASH_OUT of 20,000 ARS (out of 50,000 ARS available)
+        OrderCreateRequestApi validCashOut = new OrderCreateRequestApi(
+                savedUser.getId(),
+                arsInstrument.getId(),
+                OrderSideApi.CASH_OUT,
+                OrderTypeApi.MARKET,
+                20_000,
+                null,
+                null
+        );
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validCashOut)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.side").value("CASH_OUT"))
+                .andExpect(jsonPath("$.size").value(20000))
+                .andExpect(jsonPath("$.price").value(1.00))
+                .andExpect(jsonPath("$.status").value("FILLED"));
+
+        // 2. Excess CASH_OUT of 40,000 ARS (> 30,000 ARS remaining availableCash) -> 409 BusinessRuleViolationProblem
+        OrderCreateRequestApi excessCashOut = new OrderCreateRequestApi(
+                savedUser.getId(),
+                arsInstrument.getId(),
+                OrderSideApi.CASH_OUT,
+                OrderTypeApi.MARKET,
+                40_000,
+                null,
+                null
+        );
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(excessCashOut)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Business Rule Violation"));
     }
 }
 

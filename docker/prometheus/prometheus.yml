@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'cocos-trading-api'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['cocos-trading-api:8080']
+        labels:
+          application: 'cocos-trading-service'
+          environment: 'local'
+

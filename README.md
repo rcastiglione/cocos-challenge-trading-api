@@ -7,7 +7,8 @@ Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, 
 ## 1. Tech Stack
 
 - **Java 21** (*Records*, *Pattern Matching*, *Switch Expressions*)
-- **Spring Boot 3.3.0** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-validation`)
+- **Spring Boot 3.3.0** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`)
+- **Observability & Telemetry Stack** (*Nice-to-Have SRE Layer*): **Micrometer (`micrometer-registry-prometheus`)**, **Distributed Tracing (`micrometer-tracing-bridge-brave` con W3C `traceId`/`spanId` en logs)**, **Prometheus** y **Grafana** (con *Zero-Touch Auto-Provisioning* de *datasource* y *dashboard* en tiempo real)
 - **Lombok** (`@SuperBuilder`, `@Builder`, `@Getter`, `@RequiredArgsConstructor`, `@Slf4j`) para reducir *boilerplate* en modelos de dominio, *DTOs*, *JPA Entities* y servicios
 - **PostgreSQL 16** (NeonDB cloud PostgreSQL para el perfil `prod`, **Docker Compose** para desarrollo `local`, y **Testcontainers (`PostgreSQLContainer`)** para *functional integration testing* con paridad 100% de motor de base de datos)
 - **Zalando Problem (`problem-spring-web-starter`)** para respuestas de error estandarizadas bajo **RFC 7807**
@@ -24,8 +25,11 @@ El repositorio está estructurado en dos módulos Maven para desacoplar completa
 cocos-challenge-trading-api/
 ├── pom.xml                                  # Parent / Aggregator POM
 ├── Dockerfile                               # Multi-stage Dockerfile (Maven Builder + Corretto 21 Alpine Runtime)
-├── docker-compose.yml                       # Orquestación local (PostgreSQL 16 + Trading API)
-├── docker/postgres/init.sql                 # DDL Schema + Seed Data inicial para PostgreSQL local
+├── docker-compose.yml                       # Orquestación local (PostgreSQL 16 + Trading API + Prometheus + Grafana)
+├── docker/
+│   ├── postgres/init.sql                    # DDL Schema + Seed Data inicial para PostgreSQL local
+│   ├── prometheus/prometheus.yml            # Configuración de scrape cada 5s sobre /actuator/prometheus
+│   └── grafana/provisioning/                # Zero-Touch Provisioning de Datasource (Prometheus) y Dashboard JSON
 ├── cocos-trading-contract/                  # Submódulo 1: Pure Framework-Agnostic API Contract (DTOs, *ContractApi, Enums)
 └── cocos-trading-service/                   # Submódulo 2: Core Trading Engine Service
     └── src/
@@ -90,13 +94,14 @@ cocos-challenge-trading-api/
 ### 3.3. Ruteo de Órdenes mediante Strategy Pattern (`OrderExecutionStrategy`)
 - `MarketOrderExecutionStrategy`: Evalúa órdenes `MARKET` sobre instrumentos de `Equity` (`ACCIONES`) tomando el último precio `MarketData.close` y transiciona órdenes válidas inmediatamente a estado `FILLED`.
 - `LimitOrderExecutionStrategy`: Evalúa órdenes `LIMIT` sobre `Equity` (`ACCIONES`) utilizando el `price` límite enviado por el usuario y transiciona órdenes válidas a estado `NEW`.
-- `CashTransferExecutionStrategy`: Procesa ingresos (`CASH_IN`) y egresos (`CASH_OUT`) de `Cash` sobre instrumentos `MONEDA` (ARS) a precio unitario `1.00` ARS, generando instancias de `TransferOrder`.
+- `CashTransferExecutionStrategy`: Procesa ingresos (`CASH_IN`) y egresos (`CASH_OUT`) de `Cash` sobre instrumentos `MONEDA` (ARS) a precio unitario `1.00` ARS, generando instancias de `TransferOrder`. Valida estrictamente que un retiro `CASH_OUT` nunca supere el `availableCash` del usuario, arrojando `BusinessRuleViolationException` (traducida a `409 Conflict` / `BusinessRuleViolationProblem` bajo RFC 7807) en caso de fondos insuficientes.
 
 ---
 
-### 3.4. Dimensionamiento de Órdenes (`size` vs `amount`) y Persistencia de `REJECTED`
+### 3.4. Dimensionamiento de Órdenes (`size` vs `amount`), Persistencia de `REJECTED` y Validación de `CASH_OUT`
 - **Cálculo de `size` sin Fracciones**: El cliente puede enviar la cantidad exacta de acciones (`size`) o el monto total en ARS a invertir (`amount`). Cuando se envía `amount`, el motor calcula `size = floor(amount / executionPrice)` mediante `BigDecimal.divideToIntegralValue`, garantizando cero fracciones de acción (*fractional shares*) y sin exceder jamás el capital solicitado.
-- **Trazabilidad de Órdenes `REJECTED`**: Si un usuario no posee suficiente `availableCash` para un `BUY` o `CASH_OUT`, no posee suficientes acciones (`availableShares < size`) para un `SELL`, o envía un `amount` inferior al precio de 1 acción (`size == 0`), la orden **se persiste** en la tabla `orders` con estado `REJECTED` para auditoría y se retorna en el *response*.
+- **Trazabilidad de Órdenes `REJECTED` (`BUY` / `SELL`)**: Si un usuario no posee suficiente `availableCash` para un `BUY`, no posee suficientes acciones (`availableShares < size`) para un `SELL`, o envía un `amount` inferior al precio de 1 acción (`size == 0`), la orden de mercado **se persiste** en la tabla `orders` con estado `REJECTED` para auditoría y se retorna en el *response*.
+- **Protección de Retiros (`CASH_OUT`)**: Si un usuario solicita una transferencia saliente (`CASH_OUT`) por un monto superior a su `availableCash`, el dominio rechaza la operación inmediatamente mediante `BusinessRuleViolationException` (`BusinessRuleViolationProblem` HTTP `409 Conflict`) sin persistir el retiro inválido.
 
 ---
 
@@ -159,7 +164,46 @@ Una vez iniciada la aplicación:
 
 ---
 
-## 5. API Endpoints & Ejemplos cURL
+## 5. Observability, Distributed Tracing & Alerting Stack (*Nice-to-Have SRE Layer*)
+
+Como diferencial de ingeniería (*"Nice to have"*), el proyecto incluye un *stack* completo de **Observabilidad y Telemetría en Tiempo Real** basado en **Spring Boot Actuator**, **Micrometer**, **Micrometer Tracing (Brave)**, **Prometheus** y **Grafana**, pre-configurado en `docker-compose.yml` para monitoreo *out-of-the-box* del procesamiento de órdenes:
+
+### 5.1. Custom Business Metrics (`TradingMetricsService` & `OrderService`)
+Además de las métricas estándar de infraestructura (JVM Heap/GC, CPU, HikariCP Connection Pool y HTTP Server Requests), `OrderService` delega en un servicio dedicado de telemetría (`TradingMetricsService`) la instrumentación de métricas financieras con control estricto de cardinalidad (*low-cardinality tags*), manteniendo la lógica de negocio desacoplada del *boilerplate* de Micrometer:
+- **`cocos_orders_processed_total` (`Counter`)**:
+  Contabiliza el volumen total de órdenes procesadas por el motor transaccional, etiquetadas por:
+  - `status`: `FILLED` | `REJECTED` | `NEW` | `CANCELLED`
+  - `type`: `MARKET` | `LIMIT`
+  - `side`: `BUY` | `SELL` | `CASH_IN` | `CASH_OUT`
+- **`cocos_orders_execution_latency_seconds` (`Timer` + Histogram Buckets)**:
+  Mide la latencia *end-to-end* de ejecución de órdenes (`OrderService.placeOrder`), permitiendo calcular cuantiles exactos (`p50`, `p95`, `p99`) mediante `histogram_quantile(...)` en Prometheus y Grafana.
+
+### 5.2. Distributed Tracing en Logs (`traceId` & `spanId`)
+Mediante **`micrometer-tracing-bridge-brave`** (`100%` *sampling probability* en entorno local y propagación W3C `traceparent`), cada *request* HTTP inyecta automáticamente `traceId` y `spanId` en el contexto MDC de SLF4J/Logback:
+```text
+INFO [cocos-trading-service,668f4b2e9c1d3a4b5e6f7a8b9c0d1e2f,9c1d3a4b5e6f7a8b] --- [order] Placing order from command=...
+INFO [cocos-trading-service,668f4b2e9c1d3a4b5e6f7a8b9c0d1e2f,9c1d3a4b5e6f7a8b] --- [order] Order processed and persisted: id=42, status=FILLED...
+```
+Esto permite aislar y auditar en milisegundos la traza completa de una orden específica o diagnosticar fallos concurrentes en producción sin necesidad de levantar un contenedor pesado de Zipkin/Jaeger localmente.
+
+### 5.3. Estrategia de Alerting en Producción & Error Budgets (SLOs)
+Las métricas customizadas fueron diseñadas específicamente para alimentar sistemas de **Alerting** (**Prometheus Alertmanager** o **Grafana Alerts**) y disparar notificaciones *on-call* (**PagerDuty / Slack**) cuando se consumen los *Error Budgets*:
+1. **Anomalía en Tasa de Rechazo de Órdenes (`status="REJECTED"`)**:
+   - **PromQL Rule**: `sum(rate(cocos_orders_processed_total{status="REJECTED"}[5m])) / sum(rate(cocos_orders_processed_total[5m])) > 0.15`
+   - **Propósito Operativo**: Dispara una alerta a Slack/PagerDuty si el porcentaje de órdenes `REJECTED` supera el `15%` en una ventana móvil de 5 minutos, permitiendo detectar rápidamente desfasajes de *MarketData*, problemas de liquidez en cuentas comitentes o regresiones en clientes *upstream*.
+2. **Degradación de Latencia Crítica de Ejecución (`p99` Latency SLO Breach)**:
+   - **PromQL Rule**: `histogram_quantile(0.99, sum(rate(cocos_orders_execution_latency_seconds_bucket[5m])) by (le)) > 0.250`
+   - **Propósito Operativo**: Dispara un *page* de alta severidad si el percentil `p99` de ejecución de órdenes supera los `250ms`, protegiendo el *latency error budget* del motor transaccional frente a contención de base de datos o agotamiento del pool HikariCP.
+
+### 5.4. Acceso al Stack de Monitoreo (`docker compose up --build`)
+- **Actuator Prometheus Scrape Endpoint**: `http://localhost:8080/actuator/prometheus`
+- **Actuator Health & Readiness Probes**: `http://localhost:8080/actuator/health`
+- **Prometheus UI** (*scrape interval: 5s*): `http://localhost:9090`
+- **Grafana UI** (*Zero-Touch Dashboard pre-aprovisionado*): `http://localhost:3000` (Credenciales: `admin` / `admin` -> Dashboard **"Cocos Trading Engine — Real-Time Observability"**)
+
+---
+
+## 6. API Endpoints & Ejemplos cURL
 
 ### 1. Consultar el Portfolio de un Usuario (`GET /portfolios/{userId}`)
 Retorna el valor total de la cuenta (`totalAccountValue`), los pesos disponibles para operar (`availableCash`) y el listado de posiciones activas (`positions`) con su valuación de mercado y rendimiento.
@@ -219,7 +263,7 @@ curl --location 'http://localhost:8080/orders' \
 }'
 ```
 
-#### D. Transferencia de Dinero (`CASH_IN` / `CASH_OUT` sobre `MONEDA`)
+#### D. Transferencia Entrante de Dinero (`CASH_IN` sobre `MONEDA`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
 --header 'Content-Type: application/json' \
@@ -229,6 +273,20 @@ curl --location 'http://localhost:8080/orders' \
     "side": "CASH_IN",
     "type": "MARKET",
     "size": 50000
+}'
+```
+
+#### E. Transferencia Saliente / Retiro de Dinero (`CASH_OUT` sobre `MONEDA`)
+Valida que el monto solicitado no exceda el `availableCash` del usuario (retornando `409 BusinessRuleViolationProblem` en caso de fondos insuficientes):
+```bash
+curl --location 'http://localhost:8080/orders' \
+--header 'Content-Type: application/json' \
+--data '{
+    "userId": 1,
+    "instrumentId": 66,
+    "side": "CASH_OUT",
+    "type": "MARKET",
+    "size": 20000
 }'
 ```
 
