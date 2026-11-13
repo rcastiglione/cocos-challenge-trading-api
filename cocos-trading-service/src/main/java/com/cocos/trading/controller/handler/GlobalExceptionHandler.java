@@ -4,6 +4,7 @@ import com.cocos.trading.controller.problem.BadRequestProblem;
 import com.cocos.trading.controller.problem.BusinessRuleViolationProblem;
 import com.cocos.trading.controller.problem.ResourceNotFoundProblem;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.domain.exception.DuplicateOrderException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
@@ -16,9 +17,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 import org.zalando.problem.spring.web.advice.ProblemHandling;
@@ -78,11 +81,40 @@ public class GlobalExceptionHandler implements ProblemHandling {
                 .body(new BadRequestProblem(summaryMessage, errors));
     }
 
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<Problem> handleMissingRequestHeaderException(MissingRequestHeaderException ex) {
+        String message = String.format("Required request header '%s' is missing.", ex.getHeaderName());
+        log.warn("Missing request header: {}", message);
+        return ResponseEntity.badRequest()
+                .body(new BadRequestProblem(message, Map.of("header", ex.getHeaderName())));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Problem> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException ex) {
+        String parameterName = ex.getName();
+        String message = String.format("Invalid value '%s' for parameter '%s'.", ex.getValue(), parameterName);
+        log.warn("Parameter type mismatch: {}", message);
+        return ResponseEntity.badRequest()
+                .body(new BadRequestProblem(message, Map.of("parameter", parameterName)));
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Problem> handleResourceNotFoundException(ResourceNotFoundException ex) {
         log.warn("Resource not found: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ResourceNotFoundProblem(ex.getResourceName(), ex.getIdentifier(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(DuplicateOrderException.class)
+    public ResponseEntity<Problem> handleDuplicateOrderException(DuplicateOrderException ex) {
+        log.warn("Duplicate order request (idempotency conflict): {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new BusinessRuleViolationProblem(
+                        "Duplicate Order",
+                        Status.CONFLICT,
+                        ex.getMessage(),
+                        Map.of("idempotencyKey", ex.getIdempotencyKey().toString())
+                ));
     }
 
     @ExceptionHandler(InvalidOrderStateException.class)

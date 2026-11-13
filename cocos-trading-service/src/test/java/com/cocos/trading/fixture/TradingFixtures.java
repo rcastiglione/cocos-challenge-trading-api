@@ -13,6 +13,7 @@ import com.cocos.trading.domain.model.User;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Reusable test fixtures for unit and integration tests.
@@ -146,6 +147,7 @@ public final class TradingFixtures {
 
     public static PlaceOrderCommand marketBuyBySize(int size) {
         return PlaceOrderCommand.builder()
+                .idempotencyKey(UUID.randomUUID())
                 .userId(DEFAULT_USER_ID)
                 .instrumentId(PAMP_INSTRUMENT_ID)
                 .side(OrderSide.BUY)
@@ -156,6 +158,7 @@ public final class TradingFixtures {
 
     public static PlaceOrderCommand marketBuyByAmount(String amount) {
         return PlaceOrderCommand.builder()
+                .idempotencyKey(UUID.randomUUID())
                 .userId(DEFAULT_USER_ID)
                 .instrumentId(PAMP_INSTRUMENT_ID)
                 .side(OrderSide.BUY)

@@ -6,11 +6,12 @@ Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, 
 
 ## 1. Tech Stack
 
-- **Java 21** (*Records*, *Pattern Matching*, *Switch Expressions*)
-- **Spring Boot 3.3.0** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`)
+- **Java 21** (*Records*, *Pattern Matching*, *Switch Expressions*, *Virtual Threads*)
+- **Spring Boot 3.3.0** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-data-redis`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`)
+- **Redis 7 (`redis:7-alpine`)**: *In-Memory Store & Distributed Lock* para garantizar **Idempotencia** en la creación de órdenes (`Idempotency-Key` con TTL de 24 horas vía comandos atómicos `SET ... NX EX 86400`), previniendo *double-spending* ante *network retries* o ráfagas concurrentes
 - **Observability & Telemetry Stack** (*Nice-to-Have SRE Layer*): **Micrometer (`micrometer-registry-prometheus`)**, **Distributed Tracing (`micrometer-tracing-bridge-brave` con W3C `traceId`/`spanId` en logs)**, **Prometheus** y **Grafana** (con *Zero-Touch Auto-Provisioning* de *datasource* y *dashboard* en tiempo real)
 - **Lombok** (`@SuperBuilder`, `@Builder`, `@Getter`, `@RequiredArgsConstructor`, `@Slf4j`) para reducir *boilerplate* en modelos de dominio, *DTOs*, *JPA Entities* y servicios
-- **PostgreSQL 16** (NeonDB cloud PostgreSQL para el perfil `prod`, **Docker Compose** para desarrollo `local`, y **Testcontainers (`PostgreSQLContainer`)** para *functional integration testing* con paridad 100% de motor de base de datos)
+- **PostgreSQL 16** (NeonDB cloud PostgreSQL para el perfil `prod`, **Docker Compose** para desarrollo `local`, y **Testcontainers (`PostgreSQLContainer` + `RedisContainer`)** para *functional integration testing* con paridad 100% de infraestructura)
 - **Zalando Problem (`problem-spring-web-starter`)** para respuestas de error estandarizadas bajo **RFC 7807**
 - **SpringDoc OpenAPI 2.5 (Swagger UI)** para documentación interactiva de los *endpoints*
 - **Maven (Multi-Module)** con **Surefire** (*unit tests*), **Failsafe** (`src/it` *integration tests* con Testcontainers), y **JaCoCo** (*code coverage*)
@@ -25,7 +26,7 @@ El repositorio está estructurado en dos módulos Maven para desacoplar completa
 cocos-challenge-trading-api/
 ├── pom.xml                                  # Parent / Aggregator POM
 ├── Dockerfile                               # Multi-stage Dockerfile (Maven Builder + Corretto 21 Alpine Runtime)
-├── docker-compose.yml                       # Orquestación local (PostgreSQL 16 + Trading API + Prometheus + Grafana)
+├── docker-compose.yml                       # Orquestación local (PostgreSQL 16 + Redis 7 + Trading API + Prometheus + Grafana)
 ├── docker/
 │   ├── postgres/init.sql                    # DDL Schema + Seed Data inicial para PostgreSQL local
 │   ├── prometheus/prometheus.yml            # Configuración de scrape cada 5s sobre /actuator/prometheus
@@ -35,19 +36,19 @@ cocos-challenge-trading-api/
     └── src/
         ├── main/java/com/cocos/trading/
         │   ├── domain/                      # Modelos de dominio puros (Order, TradeOrder, TransferOrder) y excepciones
-        │   ├── application/                 # Inbound/Outbound Ports, Use Cases y Order Execution Strategies
+        │   ├── application/                 # Inbound/Outbound Ports (incl. IdempotencyRepositoryPort), Use Cases y Execution Strategies
         │   ├── controller/                  # REST Controllers, Spring Validators (@InitBinder), ApiMapper & GlobalExceptionHandler
-        │   ├── repository/                  # JPA Adapters, JPA Entities, PersistenceMapper & Spring Data Specifications
+        │   ├── repository/                  # JPA & Redis Adapters (RedisIdempotencyAdapter), JPA Entities & Specifications
         │   └── config/                      # Configuración de OpenAPI / Swagger
         ├── main/resources/
         │   ├── application.yml              # Configuración base agnóstica de entorno (default profile: local)
-        │   ├── application-local.yml        # Perfil 'local' (Docker PostgreSQL)
-        │   └── application-prod.yml         # Perfil 'prod' (NeonDB Cloud PostgreSQL)
+        │   ├── application-local.yml        # Perfil 'local' (Docker PostgreSQL + Redis)
+        │   └── application-prod.yml         # Perfil 'prod' (NeonDB Cloud PostgreSQL + Redis)
         ├── test/java/com/cocos/trading/     # Unit Tests (JUnit 5 + Mockito)
         └── it/
-            ├── java/com/cocos/trading/      # Functional Integration Tests (@SpringBootTest + MockMvc + Testcontainers)
+            ├── java/com/cocos/trading/      # Functional Integration Tests (@SpringBootTest + MockMvc + PostgreSQL/Redis Testcontainers)
             └── resources/
-                └── application-test.yml     # Perfil 'test' (Testcontainers PostgreSQL + Hibernate create-drop)
+                └── application-test.yml     # Perfil 'test' (Testcontainers PostgreSQL + Redis + Hibernate create-drop)
 ```
 
 ---
@@ -122,6 +123,24 @@ cocos-challenge-trading-api/
 
 ---
 
+### 3.7. Idempotencia y Control de Concurrencia Distribuida (`Idempotency-Key` + Redis)
+- **Contexto & Problema (*Double-Spending & Retry Storms*)**:
+  En motores de trading y pasarelas de pago (*payment gateways*), los clientes móviles o *frontends* web frecuentemente sufren *timeouts* de red o micro-cortes tras enviar un `POST /orders` y reintentan automáticamente la petición (*network retries*), o bien un usuario ansioso hace *double-click* disparando dos *requests* simultáneos. Sin un mecanismo de **Idempotencia y Distributed Locking**, un reintento sobre un `CASH_OUT`, un `CASH_IN` o una orden `MARKET BUY`/`SELL` provocaría **duplicación de órdenes y *double-spending*** sobre el saldo comitente del usuario.
+- **Solución Arquitectónica (`Idempotency-Key` + Redis `SET NX EX`)**:
+  1. **Contrato Explícito (`Idempotency-Key` UUID Header)**: El endpoint `POST /orders` exige un *header* HTTP obligatorio `Idempotency-Key` en formato `UUID` (documentado en `OrderContractApi` / OpenAPI y validado en el *controller*). Si el *header* falta o no es un UUID válido, la API responde inmediatamente con `400 Bad Request` (`BadRequestProblem` bajo RFC 7807).
+  2. **Distributed Lock Atómico & Deduplicación con TTL de 24h (`RedisIdempotencyAdapter`)**:
+     A través del puerto de salida `IdempotencyRepositoryPort` (preservando la arquitectura hexagonal pura), `OrderService.placeOrder` invoca `tryAcquire(idempotencyKey, Duration.ofHours(24))`, el cual ejecuta en **Redis** el comando atómico:
+     ```text
+     SET idempotency:orders:<Idempotency-Key> <timestamp> NX EX 86400
+     ```
+     - **`NX` (*Not Exists*)**: Garantiza a nivel de *single-threaded event loop* en Redis que, si llegan 10 *requests* concurrentes en el mismo milisegundo con la misma `Idempotency-Key`, **exactamente uno** adquiere el *lock* e ingresa a la transacción de negocio (`placeOrder`), mientras que los 9 restantes reciben `false` y son rechazados instantáneamente con `409 Conflict` (`DuplicateOrderException` -> `BusinessRuleViolationProblem`) sin siquiera consumir conexiones de PostgreSQL.
+     - **`EX 86400` (*24-Hour TTL*)**: Una vez que la orden se procesa y persiste exitosamente (`FILLED`, `NEW` o `REJECTED`), la clave permanece registrada en Redis durante **24 horas**, bloqueando cualquier reintento tardío de red dentro de esa ventana.
+     - **Compensación ante Rollback (`release`)**: Si ocurre una excepción antes de persistir la orden (por ejemplo, un `CASH_OUT` rechazado por fondos insuficientes o un `ResourceNotFoundException` que hace *rollback* de la transacción), el bloque `catch` libera la clave en Redis (`DEL`) para no bloquear innecesariamente la clave.
+- **Decisión Arquitectónica: ¿Por qué Redis en lugar de `UNIQUE(idempotency_key)` en PostgreSQL?**:
+  En un entorno productivo real, además del *fast-path lock* en Redis, agregaríamos una columna `idempotency_key UUID NOT NULL` con un *constraint* `UNIQUE(idempotency_key)` directamente en la tabla `orders` de PostgreSQL mediante una migración de **Flyway / Liquibase** como red de seguridad ACID definitiva (dejamos documentado este `// TODO` explícitamente en `OrderJpaEntity` y `OrderService`). Sin embargo, para **respetar estrictamente el esquema de base de datos fijo provisto por el evaluador del challenge** en NeonDB sin ejecutar `ALTER TABLE` destructivos, implementamos la capa de idempotencia 100% desacoplada en **Redis**.
+
+---
+
 ## 4. Estrategia de Entornos (`Spring Profiles`), Inicialización de Base de Datos & Ejecución
 
 La aplicación implementa tres perfiles de Spring Boot para garantizar aislamiento y paridad total de motor PostgreSQL entre pruebas de integración, desarrollo local y la base en la nube del challenge:
@@ -163,16 +182,16 @@ Compila el proyecto dentro de un *multi-stage Dockerfile* y levanta todos los co
 docker compose up --build
 ```
 
-#### Opción B: Base PostgreSQL en Docker + API corriendo con Maven en tu máquina
-Ideal para desarrollo y debugging local contra el contenedor `cocos-postgres`:
+#### Opción B: Base PostgreSQL + Redis en Docker + API corriendo con Maven en tu máquina
+Ideal para desarrollo y debugging local contra los contenedores `cocos-postgres` y `cocos-redis`:
 ```bash
 # 1. Instalar los artefactos del proyecto multi-módulo (cocos-trading-contract) en ~/.m2
 mvn clean install -DskipTests
 
-# 2. Levantar únicamente el contenedor de PostgreSQL 16 (ejecuta docker/postgres/init.sql si el volumen es nuevo)
-docker compose up -d cocos-postgres
+# 2. Levantar los contenedores de PostgreSQL 16 y Redis 7
+docker compose up -d cocos-postgres cocos-redis
 
-# 3. Iniciar la API con el perfil 'local' (se conecta a localhost:5432/cocos_trading)
+# 3. Iniciar la API con el perfil 'local' (se conecta a localhost:5432/cocos_trading y Redis localhost:6379)
 mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
@@ -272,10 +291,12 @@ curl --location 'http://localhost:8080/instruments?ticker=MOLI&name=Molinos'
 ```
 
 ### 3. Enviar una Orden al Mercado (`POST /orders`)
+> **Nota de Idempotencia**: Todos los *requests* a `POST /orders` requieren el *header* obligatorio `Idempotency-Key` con un `UUID` único por operación (almacenado en Redis con un TTL de 24 horas). Enviar dos veces el mismo `Idempotency-Key` retorna `409 Conflict` (`Duplicate Order`).
 
 #### A. Orden `MARKET` de Compra (`BUY`) por Cantidad Exacta de Acciones (`size`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
+--header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440001' \
 --header 'Content-Type: application/json' \
 --data '{
     "userId": 1,
@@ -289,6 +310,7 @@ curl --location 'http://localhost:8080/orders' \
 #### B. Orden `MARKET` de Compra (`BUY`) por Monto Total en ARS (`amount`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
+--header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440002' \
 --header 'Content-Type: application/json' \
 --data '{
     "userId": 1,
@@ -302,6 +324,7 @@ curl --location 'http://localhost:8080/orders' \
 #### C. Orden `LIMIT` de Compra (`BUY` — Estado `NEW`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
+--header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440003' \
 --header 'Content-Type: application/json' \
 --data '{
     "userId": 1,
@@ -316,6 +339,7 @@ curl --location 'http://localhost:8080/orders' \
 #### D. Transferencia Entrante de Dinero (`CASH_IN` sobre `MONEDA`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
+--header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440004' \
 --header 'Content-Type: application/json' \
 --data '{
     "userId": 1,
@@ -330,6 +354,7 @@ curl --location 'http://localhost:8080/orders' \
 Valida que el monto solicitado no exceda el `availableCash` del usuario (retornando `409 BusinessRuleViolationProblem` en caso de fondos insuficientes):
 ```bash
 curl --location 'http://localhost:8080/orders' \
+--header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440005' \
 --header 'Content-Type: application/json' \
 --data '{
     "userId": 1,

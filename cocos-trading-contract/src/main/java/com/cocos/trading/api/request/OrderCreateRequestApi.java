@@ -9,6 +9,7 @@ import lombok.Builder;
 /**
  * Request payload for submitting a new order to the market.
  * Supports sizing either by exact share quantity ({@code size}) or by total ARS investment ({@code amount}).
+ * Must be accompanied by a mandatory {@code Idempotency-Key} (UUID) HTTP header on {@code POST /orders}.
  *
  * @param userId       The unique identifier of the user placing the order.
  * @param instrumentId The unique identifier of the target financial instrument.
@@ -19,7 +20,7 @@ import lombok.Builder;
  * @param price        Target execution price in ARS (required for LIMIT orders; ignored for MARKET orders).
  */
 @Builder
-@Schema(description = "Request payload for submitting a market or limit order")
+@Schema(description = "Request payload for submitting a market or limit order (requires 'Idempotency-Key' UUID header)")
 public record OrderCreateRequestApi(
         @Schema(description = "User ID placing the order", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
         Long userId,

@@ -19,6 +19,21 @@ services:
     networks:
       - cocos-network
 
+  cocos-redis:
+    image: redis:7-alpine
+    container_name: cocos-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cocos-network
+
   cocos-trading-api:
     build:
       context: .
@@ -27,6 +42,8 @@ services:
     depends_on:
       cocos-postgres:
         condition: service_healthy
+      cocos-redis:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: local
       DB_HOST: cocos-postgres
@@ -34,6 +51,8 @@ services:
       DB_NAME: cocos_trading
       DB_USERNAME: cocos_user
       DB_PASSWORD: cocos_password
+      REDIS_HOST: cocos-redis
+      REDIS_PORT: 6379
     ports:
       - "8080:8080"
     stop_grace_period: 1s
@@ -76,6 +95,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   prometheus_data:
   grafana_data:
 

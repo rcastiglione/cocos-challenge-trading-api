@@ -2,6 +2,8 @@ package com.cocos.trading.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -9,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.cocos.trading.TradingApplicationIT;
+import com.cocos.trading.api.OrderContractApi;
 import com.cocos.trading.api.common.OrderSideApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import com.cocos.trading.api.request.OrderCreateRequestApi;
@@ -16,6 +19,7 @@ import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
+import com.cocos.trading.repository.RedisIdempotencyAdapter;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.entity.MarketDataJpaEntity;
 import com.cocos.trading.repository.entity.OrderJpaEntity;
@@ -28,11 +32,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 
 /**
@@ -56,12 +69,21 @@ class OrderControllerIT extends TradingApplicationIT {
     @Autowired
     private SpringDataOrderRepository orderRepository;
 
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
     private UserJpaEntity savedUser;
     private InstrumentJpaEntity arsInstrument;
     private InstrumentJpaEntity pampInstrument;
 
     @BeforeEach
     void setUpDatabase() {
+        var connectionFactory = stringRedisTemplate.getConnectionFactory();
+        if (connectionFactory != null) {
+            try (var connection = connectionFactory.getConnection()) {
+                connection.serverCommands().flushAll();
+            }
+        }
         orderRepository.deleteAll();
         marketDataRepository.deleteAll();
         instrumentRepository.deleteAll();
@@ -115,6 +137,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -145,6 +168,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -168,6 +192,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -198,6 +223,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -219,6 +245,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         String responseJson = mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(limitRequest)))
                 .andExpect(status().isCreated())
@@ -250,6 +277,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidLimitRequest)))
                 .andExpect(status().isBadRequest())
@@ -270,6 +298,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -296,6 +325,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validCashOut)))
                 .andExpect(status().isCreated())
@@ -316,10 +346,142 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(excessCashOut)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Business Rule Violation"));
+    }
+
+    @Test
+    @DisplayName("Should return 400 Bad Request when Idempotency-Key header is missing or not a valid UUID")
+    void shouldReturnBadRequestWhenIdempotencyKeyHeaderMissingOrInvalid() throws Exception {
+        OrderCreateRequestApi request = new OrderCreateRequestApi(
+                savedUser.getId(),
+                pampInstrument.getId(),
+                OrderSideApi.BUY,
+                OrderTypeApi.MARKET,
+                5,
+                null,
+                null
+        );
+
+        // Missing Idempotency-Key header
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Bad Request"));
+
+        // Malformed UUID in Idempotency-Key header
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, "invalid-uuid-format")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Bad Request"));
+    }
+
+    @Test
+    @DisplayName("Should store Idempotency-Key in Redis with 24h TTL and reject duplicate network retry with 409 Conflict")
+    void shouldStoreIdempotencyKeyInRedisAndRejectDuplicateRetry() throws Exception {
+        UUID idempotencyKey = UUID.randomUUID();
+        OrderCreateRequestApi cashInRequest = new OrderCreateRequestApi(
+                savedUser.getId(),
+                arsInstrument.getId(),
+                OrderSideApi.CASH_IN,
+                OrderTypeApi.MARKET,
+                25_000,
+                null,
+                null
+        );
+
+        // 1st attempt succeeds (201 Created)
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, idempotencyKey.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(cashInRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("FILLED"));
+
+        // Verify key is stored in Redis with ~24h TTL (86,400s)
+        String redisKey = RedisIdempotencyAdapter.buildRedisKey(idempotencyKey);
+        assertEquals(Boolean.TRUE, stringRedisTemplate.hasKey(redisKey));
+        Long ttlSeconds = stringRedisTemplate.getExpire(redisKey, TimeUnit.SECONDS);
+        assertNotNull(ttlSeconds);
+        assertTrue(ttlSeconds > 86_000L && ttlSeconds <= 86_400L, "Expected TTL close to 24h (86400s), got: " + ttlSeconds);
+
+        // 2nd attempt (network retry with identical Idempotency-Key) is rejected with 409 Conflict
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, idempotencyKey.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(cashInRequest)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Duplicate Order"))
+                .andExpect(jsonPath("$.parameters.idempotencyKey").value(idempotencyKey.toString()));
+
+        // Ensure no duplicate order was persisted in PostgreSQL (1 initial seed + 1 new CASH_IN = 2 total)
+        assertEquals(2, orderRepository.findAll().size());
+    }
+
+    @Test
+    @DisplayName("Should prevent double-spending under concurrent duplicate requests sharing the same Idempotency-Key")
+    void shouldPreventConcurrentDoubleSpendingWithSameIdempotencyKey() throws Exception {
+        int concurrentRequests = 10;
+        UUID sharedIdempotencyKey = UUID.randomUUID();
+        OrderCreateRequestApi buyRequest = new OrderCreateRequestApi(
+                savedUser.getId(),
+                pampInstrument.getId(),
+                OrderSideApi.BUY,
+                OrderTypeApi.MARKET,
+                10,
+                null,
+                null
+        );
+        String payload = objectMapper.writeValueAsString(buyRequest);
+
+        CountDownLatch readyLatch = new CountDownLatch(concurrentRequests);
+        CountDownLatch startGate = new CountDownLatch(1);
+        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+        AtomicInteger createdCount = new AtomicInteger(0);
+        AtomicInteger conflictCount = new AtomicInteger(0);
+
+        try {
+            List<Future<Integer>> futures = new ArrayList<>(concurrentRequests);
+            for (int i = 0; i < concurrentRequests; i++) {
+                futures.add(executor.submit(() -> {
+                    readyLatch.countDown();
+                    startGate.await(5, TimeUnit.SECONDS);
+                    return mockMvc.perform(post("/orders")
+                                    .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, sharedIdempotencyKey.toString())
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(payload))
+                            .andReturn()
+                            .getResponse()
+                            .getStatus();
+                }));
+            }
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startGate.countDown();
+
+            for (Future<Integer> future : futures) {
+                int httpStatus = future.get(10, TimeUnit.SECONDS);
+                if (httpStatus == 201) {
+                    createdCount.incrementAndGet();
+                } else if (httpStatus == 409) {
+                    conflictCount.incrementAndGet();
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(1, createdCount.get(), "Exactly one request must succeed with 201 Created");
+        assertEquals(concurrentRequests - 1, conflictCount.get(), "All duplicate concurrent requests must fail with 409 Conflict");
+        // 1 initial seed order + 1 executed BUY order = 2 total orders in DB
+        assertEquals(2, orderRepository.findAll().size());
     }
 }
 

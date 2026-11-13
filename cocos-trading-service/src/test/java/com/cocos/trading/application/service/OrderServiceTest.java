@@ -6,10 +6,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
+import com.cocos.trading.application.port.out.IdempotencyRepositoryPort;
 import com.cocos.trading.application.port.out.InstrumentRepositoryPort;
 import com.cocos.trading.application.port.out.MarketDataRepositoryPort;
 import com.cocos.trading.application.port.out.OrderRepositoryPort;
@@ -18,6 +23,7 @@ import com.cocos.trading.application.strategy.CashTransferExecutionStrategy;
 import com.cocos.trading.application.strategy.LimitOrderExecutionStrategy;
 import com.cocos.trading.application.strategy.MarketOrderExecutionStrategy;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.domain.exception.DuplicateOrderException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
@@ -30,15 +36,21 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,6 +62,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Order Service & Execution Strategies Unit Tests")
 class OrderServiceTest {
+
+    @Mock
+    private IdempotencyRepositoryPort idempotencyRepositoryPort;
 
     @Mock
     private UserRepositoryPort userRepositoryPort;
@@ -70,7 +85,10 @@ class OrderServiceTest {
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
         TradingMetricsService tradingMetricsService = new TradingMetricsService(meterRegistry);
+        lenient().when(idempotencyRepositoryPort.tryAcquire(any(UUID.class), eq(OrderService.IDEMPOTENCY_TTL)))
+                .thenReturn(true);
         orderService = new OrderService(
+                idempotencyRepositoryPort,
                 userRepositoryPort,
                 instrumentRepositoryPort,
                 marketDataRepositoryPort,
@@ -373,6 +391,7 @@ class OrderServiceTest {
     @DisplayName("Should throw BusinessRuleViolationException when CASH_OUT requested amount exceeds availableCash")
     void shouldThrowBusinessRuleViolationWhenCashOutExceedsAvailableCash() {
         PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .idempotencyKey(UUID.randomUUID())
                 .userId(TradingFixtures.DEFAULT_USER_ID)
                 .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
                 .side(OrderSide.CASH_OUT)
@@ -392,5 +411,102 @@ class OrderServiceTest {
                 () -> orderService.placeOrder(command)
         );
         assertTrue(exception.getMessage().contains("Insufficient available cash for CASH_OUT transfer"));
+        verify(idempotencyRepositoryPort).release(command.idempotencyKey());
+    }
+
+    @Test
+    @DisplayName("Should reject duplicate order with DuplicateOrderException when Idempotency-Key already exists in Redis")
+    void shouldRejectDuplicateOrderWhenIdempotencyKeyAlreadyExists() {
+        UUID duplicateKey = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .idempotencyKey(duplicateKey)
+                .userId(TradingFixtures.DEFAULT_USER_ID)
+                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
+                .side(OrderSide.BUY)
+                .type(OrderType.MARKET)
+                .size(10)
+                .build();
+
+        when(idempotencyRepositoryPort.tryAcquire(duplicateKey, Duration.ofHours(24)))
+                .thenReturn(false);
+
+        DuplicateOrderException exception = assertThrows(
+                DuplicateOrderException.class,
+                () -> orderService.placeOrder(command)
+        );
+
+        assertEquals(duplicateKey, exception.getIdempotencyKey());
+        verify(orderRepositoryPort, never()).save(any());
+        verify(idempotencyRepositoryPort, never()).release(any());
+    }
+
+    @Test
+    @DisplayName("Should prevent double-spending when multiple concurrent threads submit the same Idempotency-Key")
+    void shouldPreventDoubleSpendingWhenSameIdempotencyKeySubmittedConcurrently() throws Exception {
+        int concurrentAttempts = 20;
+        UUID sharedIdempotencyKey = UUID.randomUUID();
+        PlaceOrderCommand command = PlaceOrderCommand.builder()
+                .idempotencyKey(sharedIdempotencyKey)
+                .userId(TradingFixtures.DEFAULT_USER_ID)
+                .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
+                .side(OrderSide.CASH_OUT)
+                .type(OrderType.MARKET)
+                .size(25_000)
+                .build();
+
+        Set<UUID> lockedKeys = ConcurrentHashMap.newKeySet();
+        when(idempotencyRepositoryPort.tryAcquire(eq(sharedIdempotencyKey), eq(OrderService.IDEMPOTENCY_TTL)))
+                .thenAnswer(inv -> lockedKeys.add(inv.getArgument(0)));
+
+        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+                .thenReturn(Optional.of(TradingFixtures.defaultUser()));
+        when(instrumentRepositoryPort.findById(TradingFixtures.ARS_INSTRUMENT_ID))
+                .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
+        when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
+        when(orderRepositoryPort.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CountDownLatch readyLatch = new CountDownLatch(concurrentAttempts);
+        CountDownLatch startGate = new CountDownLatch(1);
+        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger duplicateCount = new AtomicInteger(0);
+
+        try {
+            List<Future<Order>> futures = new ArrayList<>(concurrentAttempts);
+            for (int i = 0; i < concurrentAttempts; i++) {
+                futures.add(executor.submit(() -> {
+                    readyLatch.countDown();
+                    startGate.await(5, TimeUnit.SECONDS);
+                    return orderService.placeOrder(command);
+                }));
+            }
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startGate.countDown();
+
+            for (Future<Order> future : futures) {
+                try {
+                    Order order = future.get(5, TimeUnit.SECONDS);
+                    if (order.getStatus() == OrderStatus.FILLED) {
+                        successCount.incrementAndGet();
+                    }
+                } catch (ExecutionException ex) {
+                    if (ex.getCause() instanceof DuplicateOrderException) {
+                        duplicateCount.incrementAndGet();
+                    } else {
+                        throw ex;
+                    }
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(1, successCount.get());
+        assertEquals(concurrentAttempts - 1, duplicateCount.get());
+        verify(orderRepositoryPort, times(1)).save(any(Order.class));
     }
 }

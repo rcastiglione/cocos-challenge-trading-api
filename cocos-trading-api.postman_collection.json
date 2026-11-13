@@ -72,6 +72,11 @@
         "method": "POST",
         "header": [
           {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
+          },
+          {
             "key": "Content-Type",
             "value": "application/json"
           }
@@ -94,6 +99,11 @@
         "method": "POST",
         "header": [
           {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
+          },
+          {
             "key": "Content-Type",
             "value": "application/json"
           }
@@ -115,6 +125,11 @@
       "request": {
         "method": "POST",
         "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
+          },
           {
             "key": "Content-Type",
             "value": "application/json"
@@ -151,6 +166,11 @@
         "method": "POST",
         "header": [
           {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
+          },
+          {
             "key": "Content-Type",
             "value": "application/json"
           }
@@ -173,6 +193,11 @@
         "method": "POST",
         "header": [
           {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}",
+            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
+          },
+          {
             "key": "Content-Type",
             "value": "application/json"
           }
@@ -187,6 +212,33 @@
           "path": ["orders"]
         },
         "description": "Withdraws ARS from the user's account using the MONEDA instrument (validates that requested amount does not exceed availableCash)."
+      }
+    },
+    {
+      "name": "Fail: Duplicate Order (Idempotency test)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "123e4567-e89b-12d3-a456-426614174000",
+            "description": "Hardcoded static UUID to test idempotency rejection (send twice to trigger 409 Conflict)"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"size\": 10\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Uses a static Idempotency-Key UUID (123e4567-e89b-12d3-a456-426614174000). Click 'Send' once to create the order (201 Created), then click 'Send' a second time to verify the 409 Conflict (Duplicate Order) idempotency protection."
       }
     }
   ]

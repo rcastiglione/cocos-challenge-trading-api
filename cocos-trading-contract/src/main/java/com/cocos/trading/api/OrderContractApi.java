@@ -4,7 +4,9 @@ import com.cocos.trading.api.request.OrderCreateRequestApi;
 import com.cocos.trading.api.response.OrderApi;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.UUID;
 
 /**
  * Framework-agnostic contract interface for order submission and management.
@@ -15,19 +17,34 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 )
 public interface OrderContractApi {
 
+    String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
     /**
      * Submits a new order (MARKET or LIMIT; BUY, SELL, CASH_IN, or CASH_OUT) to the market.
      *
-     * @param createRequest The order creation request payload.
+     * @param idempotencyKey Mandatory UUID idempotency key header to prevent duplicate order execution on network retries.
+     * @param createRequest  The order creation request payload.
      * @return The persisted {@link OrderApi} reflecting its resulting status (FILLED, NEW, or REJECTED).
      */
     @Operation(
             summary = "Submit an equity order (BUY/SELL) or cash transfer (CASH_IN/CASH_OUT)",
             description = "Places a MARKET or LIMIT equity order (BUY, SELL) or a cash transfer (CASH_IN, CASH_OUT on MONEDA instruments) "
-                    + "by exact quantity (size) or total ARS amount (amount). Equity orders with insufficient funds/holdings result in a persisted "
-                    + "REJECTED order, while CASH_OUT transfers exceeding availableCash are rejected with a 409 BusinessRuleViolationProblem."
+                    + "by exact quantity (size) or total ARS amount (amount). Requires a mandatory UUID 'Idempotency-Key' HTTP header "
+                    + "(stored in Redis with a 24-hour TTL) to guarantee idempotency and prevent double-spending on network retries. "
+                    + "Equity orders with insufficient funds/holdings result in a persisted REJECTED order, while duplicate idempotency keys "
+                    + "or CASH_OUT transfers exceeding availableCash are rejected with a 409 BusinessRuleViolationProblem."
     )
-    OrderApi create(OrderCreateRequestApi createRequest);
+    OrderApi create(
+            @Parameter(
+                    in = ParameterIn.HEADER,
+                    name = IDEMPOTENCY_KEY_HEADER,
+                    description = "Mandatory UUID v4 idempotency key to prevent duplicate order placement and double-spending across network retries (24h TTL)",
+                    example = "550e8400-e29b-41d4-a716-446655440000",
+                    required = true
+            )
+            UUID idempotencyKey,
+            OrderCreateRequestApi createRequest
+    );
 
     /**
      * Cancels an existing order if its current status is NEW.

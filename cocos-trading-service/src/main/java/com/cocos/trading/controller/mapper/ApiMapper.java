@@ -20,6 +20,7 @@ import com.cocos.trading.domain.model.OrderType;
 import com.cocos.trading.domain.model.Portfolio;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Utility mapper converting between API contract DTOs (`*Api`) and application/domain models.
@@ -50,13 +51,15 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts an {@link OrderCreateRequestApi} to a {@link PlaceOrderCommand}.
+     * Converts an {@link OrderCreateRequestApi} and {@code Idempotency-Key} UUID to a {@link PlaceOrderCommand}.
      *
-     * @param request The API order creation request.
+     * @param idempotencyKey Mandatory UUID idempotency key from the request header.
+     * @param request        The API order creation request.
      * @return The application {@link PlaceOrderCommand}.
      */
-    public static PlaceOrderCommand toCommand(OrderCreateRequestApi request) {
+    public static PlaceOrderCommand toCommand(UUID idempotencyKey, OrderCreateRequestApi request) {
         return PlaceOrderCommand.builder()
+                .idempotencyKey(idempotencyKey)
                 .userId(request.userId())
                 .instrumentId(request.instrumentId())
                 .side(OrderSide.valueOf(request.side().name()))
@@ -65,6 +68,16 @@ public final class ApiMapper {
                 .amount(request.amount())
                 .price(request.price())
                 .build();
+    }
+
+    /**
+     * Converts an {@link OrderCreateRequestApi} to a {@link PlaceOrderCommand}.
+     *
+     * @param request The API order creation request.
+     * @return The application {@link PlaceOrderCommand}.
+     */
+    public static PlaceOrderCommand toCommand(OrderCreateRequestApi request) {
+        return toCommand(null, request);
     }
 
     /**

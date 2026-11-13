@@ -6,6 +6,11 @@ spring:
     name: cocos-trading-service
   profiles:
     default: local
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
   jpa:
     open-in-view: false
     hibernate:
