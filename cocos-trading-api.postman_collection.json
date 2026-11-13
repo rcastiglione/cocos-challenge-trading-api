@@ -1,0 +1,172 @@
+{
+  "info": {
+    "name": "Cocos Capital Trading Engine API",
+    "description": "Postman Collection for the Cocos Challenge Transactional Trading Engine API (Portfolio Valuation, Instrument Search, and MARKET/LIMIT Order Routing).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get User Portfolio",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/portfolios/1",
+          "host": ["{{baseUrl}}"],
+          "path": ["portfolios", "1"]
+        },
+        "description": "Retrieves the user's total account value in ARS, available cash for trading, and held equity positions with market value and total/daily return percentages."
+      }
+    },
+    {
+      "name": "2. Search Instruments (General Query)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/instruments?query=PAMP",
+          "host": ["{{baseUrl}}"],
+          "path": ["instruments"],
+          "query": [
+            {
+              "key": "query",
+              "value": "PAMP"
+            }
+          ]
+        },
+        "description": "Searches instruments matching ticker or name (case-insensitive substring match)."
+      }
+    },
+    {
+      "name": "3. Search Instruments (By Ticker & Name)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos",
+          "host": ["{{baseUrl}}"],
+          "path": ["instruments"],
+          "query": [
+            {
+              "key": "ticker",
+              "value": "MOLI"
+            },
+            {
+              "key": "name",
+              "value": "Molinos"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. Submit MARKET BUY Order (By Exact Share Quantity)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"size\": 10\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Places a MARKET BUY order for an exact number of shares using the latest close price. Transitions immediately to FILLED (or REJECTED if insufficient funds)."
+      }
+    },
+    {
+      "name": "5. Submit MARKET BUY Order (By Total ARS Investment Amount)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"amount\": 15000.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Places a MARKET BUY order by total ARS amount, automatically calculating the maximum whole shares (floor(amount / closePrice))."
+      }
+    },
+    {
+      "name": "6. Submit LIMIT BUY Order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"size\": 5,\n  \"price\": 900.00\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Places a LIMIT BUY order with a target price. Stored in status NEW if funds are sufficient."
+      }
+    },
+    {
+      "name": "7. Cancel Pending (NEW) Order",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/orders/105/cancel",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders", "105", "cancel"]
+        },
+        "description": "Cancels an order currently in NEW status, transitioning it to CANCELLED."
+      }
+    },
+    {
+      "name": "8. Submit CASH_IN Transfer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_IN\",\n  \"type\": \"MARKET\",\n  \"size\": 50000\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        },
+        "description": "Deposits ARS into the user's account using the MONEDA instrument."
+      }
+    }
+  ]
+}
+
