@@ -2,9 +2,9 @@ package com.cocos.trading.application.strategy;
 
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.cocos.trading.domain.model.MarketData;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
-import java.math.BigDecimal;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,10 +22,10 @@ public class MarketOrderExecutionStrategy extends AbstractEquityOrderExecutionSt
     }
 
     @Override
-    protected BigDecimal resolveExecutionPrice(OrderExecutionContext context) {
+    protected MonetaryAmount resolveExecutionPrice(OrderExecutionContext context) {
         MarketData marketData = context.latestMarketData()
                 .orElseThrow(() -> new ResourceNotFoundException("MarketData for instrument", context.instrument().id()));
-        if (marketData.close() == null || marketData.close().compareTo(BigDecimal.ZERO) <= 0) {
+        if (marketData.close() == null || marketData.close().isZeroOrNegative()) {
             throw new ResourceNotFoundException("Valid close price for instrument", context.instrument().id());
         }
         return marketData.close();
@@ -36,4 +36,3 @@ public class MarketOrderExecutionStrategy extends AbstractEquityOrderExecutionSt
         return OrderStatus.FILLED;
     }
 }
-

@@ -11,6 +11,7 @@ import com.cocos.trading.application.port.out.OrderRepositoryPort;
 import com.cocos.trading.application.port.out.UserRepositoryPort;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.cocos.trading.domain.model.AssetPosition;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.Portfolio;
@@ -78,17 +79,17 @@ class PortfolioServiceTest {
         Portfolio portfolio = portfolioService.getPortfolio(userId);
 
         // Then
-        assertEquals(userId, portfolio.userId());
-        assertEquals("10001", portfolio.accountNumber());
-        assertEquals(new BigDecimal("838000.00"), portfolio.availableCash());
-        assertEquals(new BigDecimal("912068.00"), portfolio.totalAccountValue());
+        assertEquals(userId, portfolio.user().id());
+        assertEquals("10001", portfolio.user().accountNumber());
+        assertEquals(MonetaryAmount.ars("838000.00"), portfolio.availableCash());
+        assertEquals(MonetaryAmount.ars("912068.00"), portfolio.totalAccountValue());
         assertEquals(1, portfolio.positions().size());
 
         AssetPosition pampPosition = portfolio.positions().getFirst();
-        assertEquals("PAMP", pampPosition.ticker());
+        assertEquals("PAMP", pampPosition.instrument().ticker());
         assertEquals(80, pampPosition.quantity());
-        assertEquals(new BigDecimal("925.85"), pampPosition.lastPrice());
-        assertEquals(new BigDecimal("74068.00"), pampPosition.marketValue());
+        assertEquals(MonetaryAmount.ars("925.85"), pampPosition.lastPrice());
+        assertEquals(MonetaryAmount.ars("74068.00"), pampPosition.marketValue());
         assertEquals(new BigDecimal("15.73"), pampPosition.totalReturnPercentage());
         assertEquals(new BigDecimal("2.15"), pampPosition.dailyReturnPercentage());
     }
@@ -112,8 +113,8 @@ class PortfolioServiceTest {
 
         Portfolio portfolio = portfolioService.getPortfolio(userId);
 
-        assertEquals(new BigDecimal("100500.00"), portfolio.availableCash());
-        assertEquals(new BigDecimal("100500.00"), portfolio.totalAccountValue());
+        assertEquals(MonetaryAmount.ars("100500.00"), portfolio.availableCash());
+        assertEquals(MonetaryAmount.ars("100500.00"), portfolio.totalAccountValue());
         assertTrue(portfolio.positions().isEmpty());
     }
 
@@ -125,4 +126,3 @@ class PortfolioServiceTest {
         assertThrows(ResourceNotFoundException.class, () -> portfolioService.getPortfolio(999L));
     }
 }
-

@@ -1,10 +1,10 @@
 package com.cocos.trading.api.response;
 
+import com.cocos.trading.api.common.MonetaryAmount;
 import com.cocos.trading.api.common.OrderSideApi;
 import com.cocos.trading.api.common.OrderStatusApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.math.BigDecimal;
 import lombok.Builder;
 
 /**
@@ -35,8 +35,8 @@ public record OrderApi(
         @Schema(description = "Quantity of shares or cash units", example = "10")
         Integer size,
 
-        @Schema(description = "Execution or limit price in ARS", example = "925.85")
-        BigDecimal price,
+        @Schema(description = "Execution or limit price in ARS")
+        MonetaryAmount price,
 
         @Schema(description = "Order type", example = "MARKET")
         OrderTypeApi type,
@@ -51,4 +51,3 @@ public record OrderApi(
         String datetime
 ) {
 }
-

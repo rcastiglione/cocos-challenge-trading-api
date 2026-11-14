@@ -102,32 +102,43 @@ class PortfolioAndInstrumentControllerIT extends TradingApplicationIT {
     }
 
     @Test
-    @DisplayName("Should return user portfolio with available cash, positions, and total valuation")
+    @DisplayName("Should return user portfolio with semantically grouped user/instrument and MonetaryAmount valuation")
     void shouldGetPortfolioValuation() throws Exception {
-        // Available Cash = 100,000 - (10 * 800) = 92,000.00
-        // Position PAMP = 10 * 925.85 = 9,258.50 (Total Return = (925.85 - 800)/800 * 100 = 15.73%)
-        // Total Account Value = 92,000.00 + 9,258.50 = 101,258.50
+        // Available Cash = 100,000 - (10 * 800) = 92,000.00 ARS
+        // Position PAMP = 10 * 925.85 = 9,258.50 ARS (Total Return = (925.85 - 800)/800 * 100 = 15.73%)
+        // Total Account Value = 92,000.00 + 9,258.50 = 101,258.50 ARS
         mockMvc.perform(get("/portfolios/{userId}", savedUser.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value(savedUser.getId()))
-                .andExpect(jsonPath("$.accountNumber").value("10001"))
-                .andExpect(jsonPath("$.availableCash").value(92000.00))
-                .andExpect(jsonPath("$.totalAccountValue").value(101258.50))
+                .andExpect(jsonPath("$.user.id").value(savedUser.getId()))
+                .andExpect(jsonPath("$.user.accountNumber").value("10001"))
+                .andExpect(jsonPath("$.availableCash.amount").value(92000.00))
+                .andExpect(jsonPath("$.availableCash.currency").value("ARS"))
+                .andExpect(jsonPath("$.totalAccountValue.amount").value(101258.50))
+                .andExpect(jsonPath("$.totalAccountValue.currency").value("ARS"))
                 .andExpect(jsonPath("$.positions.length()").value(1))
-                .andExpect(jsonPath("$.positions[0].ticker").value("PAMP"))
+                .andExpect(jsonPath("$.positions[0].instrument.id").value(pampInstrument.getId()))
+                .andExpect(jsonPath("$.positions[0].instrument.ticker").value("PAMP"))
+                .andExpect(jsonPath("$.positions[0].instrument.name").doesNotExist())
                 .andExpect(jsonPath("$.positions[0].quantity").value(10))
-                .andExpect(jsonPath("$.positions[0].marketValue").value(9258.50))
-                .andExpect(jsonPath("$.positions[0].totalReturnPercentage").value(15.73));
+                .andExpect(jsonPath("$.positions[0].lastPrice.amount").value(925.85))
+                .andExpect(jsonPath("$.positions[0].lastPrice.currency").value("ARS"))
+                .andExpect(jsonPath("$.positions[0].marketValue.amount").value(9258.50))
+                .andExpect(jsonPath("$.positions[0].marketValue.currency").value("ARS"))
+                .andExpect(jsonPath("$.positions[0].totalReturnPercentage").value(15.73))
+                .andExpect(jsonPath("$.positions[0].dailyReturnPercentage").value(2.15));
     }
 
     @Test
-    @DisplayName("Should search instruments by query, ticker, and name")
+    @DisplayName("Should search instruments by query, ticker, and name returning MonetaryAmount prices")
     void shouldSearchInstrumentsByTickerAndName() throws Exception {
         mockMvc.perform(get("/instruments").param("query", "pampa"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].ticker").value("PAMP"))
-                .andExpect(jsonPath("$[0].lastPrice").value(925.85));
+                .andExpect(jsonPath("$[0].lastPrice.amount").value(925.85))
+                .andExpect(jsonPath("$[0].lastPrice.currency").value("ARS"))
+                .andExpect(jsonPath("$[0].previousClose.amount").value(906.35))
+                .andExpect(jsonPath("$[0].previousClose.currency").value("ARS"));
 
         mockMvc.perform(get("/instruments").param("ticker", "MOLI"))
                 .andExpect(status().isOk())
@@ -135,4 +146,3 @@ class PortfolioAndInstrumentControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$[0].name").value("Molinos Río de la Plata"));
     }
 }
-

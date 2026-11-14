@@ -141,6 +141,22 @@ cocos-challenge-trading-api/
 
 ---
 
+### 3.8. Money Pattern (`MonetaryAmount`) y Agrupamiento Semántico de Entidades (`user` & `instrument`)
+- **Contexto & Problemas (*Scalar Money Anti-Pattern, Primitive Obsession & Flat Payloads*)**:
+  1. **En el Contrato HTTP**: Representar importes monetarios (`totalAccountValue`, `availableCash`, `marketValue`, `lastPrice`, `price`, `amount`) como números escalares planos (`BigDecimal`) en una API Fintech es un *anti-pattern* que introduce ambigüedad de divisa y riesgo de *currency mismatch* cuando la plataforma evoluciona hacia operatoria bimonetaria o multimoneda (`ARS`, `USD` MEP, `USD` CCL).
+  2. **En el Dominio (*Primitive Obsession*)**: Manipular `BigDecimal` sueltos en `Order`, `Portfolio` y `AssetPosition` dispersa las reglas de escala (`scale = 2`, `RoundingMode.HALF_UP`) y carece de control de divisa en sumas o comparaciones.
+  3. **Cohesión del Payload JSON**: Exponer `userId` y `accountNumber` sueltos en la raíz del Portfolio, o mezclar `instrumentId`, `ticker` y `name` al mismo nivel que métricas dinámicas (`quantity`, `marketValue`, `totalReturnPercentage`) en cada posición, degrada la semántica REST.
+- **Solución Arquitectónica (Tactical DDD & API Design)**:
+  - **Money Pattern End-to-End (`MonetaryAmount`)**:
+    - En `cocos-trading-contract`, todos los importes y precios se transportan mediante el objeto compuesto `MonetaryAmount(BigDecimal amount, String currency)` (`{ "amount": 925.85, "currency": "ARS" }`), validado explícitamente en `OrderCreateRequestValidator`.
+    - En `cocos-trading-service`, el *Value Object* de dominio `MonetaryAmount` encapsula la normalización de escala (`2` decimales `HALF_UP`) y toda la aritmética financiera segura (*currency-safe arithmetic*: `add`, `subtract`, `multiply`, `negate`, `divideToIntegralShares`, `isLessThan`), verificando `assertSameCurrency` antes de cada operación.
+  - **Agrupamiento Semántico de Entidades (`user` e `instrument`)**:
+    - En `Portfolio` / `PortfolioApi`, la identidad del titular se agrupa bajo `"user": { "id", "accountNumber" }` (`User` en el dominio y `UserSummaryApi` en el contrato).
+    - En `AssetPosition` / `AssetPositionApi`, la identidad del activo (`id`, `ticker`) se agrupa bajo `"instrument": { "id", "ticker" }` (`Instrument` en el dominio e `InstrumentSummaryApi` en el contrato, omitiendo `name` para mantener el *payload* compacto), mejorando sustancialmente la **cohesión semántica del contrato y la Developer Experience (DX)** para consumidores frontend y móviles.
+  - **Preservación del Esquema SQL vía Anti-Corruption Layer (`PersistenceMapper`)**: Siguiendo la regla del challenge (*"Los precios de los activos tienen que estar en pesos"*), `PersistenceMapper` envuelve automáticamente los valores numéricos en `MonetaryAmount.ars(...)` al leer de PostgreSQL y los desencapsula al persistir (`INSERT`/`UPDATE`), manteniendo **100% intacto el esquema de base de datos original del evaluador**.
+
+---
+
 ## 4. Estrategia de Entornos (`Spring Profiles`), Inicialización de Base de Datos & Ejecución
 
 La aplicación implementa tres perfiles de Spring Boot para garantizar aislamiento y paridad total de motor PostgreSQL entre pruebas de integración, desarrollo local y la base en la nube del challenge:
@@ -275,9 +291,33 @@ Las métricas customizadas fueron diseñadas específicamente para alimentar sis
 ## 6. API Endpoints & Ejemplos cURL
 
 ### 1. Consultar el Portfolio de un Usuario (`GET /portfolios/{userId}`)
-Retorna el valor total de la cuenta (`totalAccountValue`), los pesos disponibles para operar (`availableCash`) y el listado de posiciones activas (`positions`) con su valuación de mercado y rendimiento.
+Retorna los datos del titular agrupados bajo `user`, el valor total de la cuenta (`totalAccountValue`), los pesos disponibles para operar (`availableCash`) como objetos `MonetaryAmount`, y el listado de posiciones activas (`positions`) con la identidad del activo agrupada bajo `instrument`:
 ```bash
 curl --location 'http://localhost:8080/portfolios/1'
+```
+Ejemplo de respuesta (`200 OK`):
+```json
+{
+  "user": {
+    "id": 1,
+    "accountNumber": "10001"
+  },
+  "totalAccountValue": { "amount": 1697459.88, "currency": "ARS" },
+  "availableCash": { "amount": 1286738.70, "currency": "ARS" },
+  "positions": [
+    {
+      "instrument": {
+        "id": 47,
+        "ticker": "PAMP"
+      },
+      "quantity": 298,
+      "lastPrice": { "amount": 925.85, "currency": "ARS" },
+      "marketValue": { "amount": 275903.30, "currency": "ARS" },
+      "totalReturnPercentage": 2.15,
+      "dailyReturnPercentage": 1.55
+    }
+  ]
+}
 ```
 
 ### 2. Buscar Instrumentos del Mercado (`GET /instruments`)
@@ -307,7 +347,7 @@ curl --location 'http://localhost:8080/orders' \
 }'
 ```
 
-#### B. Orden `MARKET` de Compra (`BUY`) por Monto Total en ARS (`amount`)
+#### B. Orden `MARKET` de Compra (`BUY`) por Monto Total en ARS (`amount` como `MonetaryAmount`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
 --header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440002' \
@@ -317,11 +357,14 @@ curl --location 'http://localhost:8080/orders' \
     "instrumentId": 47,
     "side": "BUY",
     "type": "MARKET",
-    "amount": 15000.00
+    "amount": {
+        "amount": 15000.00,
+        "currency": "ARS"
+    }
 }'
 ```
 
-#### C. Orden `LIMIT` de Compra (`BUY` — Estado `NEW`)
+#### C. Orden `LIMIT` de Compra (`BUY` — Estado `NEW`, `price` como `MonetaryAmount`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
 --header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440003' \
@@ -332,7 +375,10 @@ curl --location 'http://localhost:8080/orders' \
     "side": "BUY",
     "type": "LIMIT",
     "size": 5,
-    "price": 900.00
+    "price": {
+        "amount": 900.00,
+        "currency": "ARS"
+    }
 }'
 ```
 

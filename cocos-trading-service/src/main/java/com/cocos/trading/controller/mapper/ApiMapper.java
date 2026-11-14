@@ -8,16 +8,21 @@ import com.cocos.trading.api.request.InstrumentSearchFilterRequestApi;
 import com.cocos.trading.api.request.OrderCreateRequestApi;
 import com.cocos.trading.api.response.AssetPositionApi;
 import com.cocos.trading.api.response.InstrumentApi;
+import com.cocos.trading.api.response.InstrumentSummaryApi;
 import com.cocos.trading.api.response.OrderApi;
 import com.cocos.trading.api.response.PortfolioApi;
+import com.cocos.trading.api.response.UserSummaryApi;
 import com.cocos.trading.application.port.in.model.InstrumentSearchQuery;
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
 import com.cocos.trading.domain.model.AssetPosition;
+import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentQuote;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderType;
 import com.cocos.trading.domain.model.Portfolio;
+import com.cocos.trading.domain.model.User;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
@@ -65,8 +70,8 @@ public final class ApiMapper {
                 .side(OrderSide.valueOf(request.side().name()))
                 .type(OrderType.valueOf(request.type().name()))
                 .size(request.size())
-                .amount(request.amount())
-                .price(request.price())
+                .amount(toDomainMonetaryAmount(request.amount()))
+                .price(toDomainMonetaryAmount(request.price()))
                 .build();
     }
 
@@ -81,7 +86,8 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a domain {@link Portfolio} to a {@link PortfolioApi}.
+     * Converts a domain {@link Portfolio} to a {@link PortfolioApi}, grouping user metadata under {@code user}
+     * and instrument metadata under each position's {@code instrument}.
      *
      * @param portfolio The domain portfolio.
      * @return The {@link PortfolioApi} response DTO.
@@ -91,11 +97,18 @@ public final class ApiMapper {
                 .map(ApiMapper::toApi)
                 .toList();
 
+        User user = portfolio.user();
+        UserSummaryApi userSummary = user != null
+                ? UserSummaryApi.builder()
+                        .id(user.id())
+                        .accountNumber(user.accountNumber())
+                        .build()
+                : null;
+
         return PortfolioApi.builder()
-                .userId(portfolio.userId())
-                .accountNumber(portfolio.accountNumber())
-                .totalAccountValue(portfolio.totalAccountValue())
-                .availableCash(portfolio.availableCash())
+                .user(userSummary)
+                .totalAccountValue(toContractMonetaryAmount(portfolio.totalAccountValue()))
+                .availableCash(toContractMonetaryAmount(portfolio.availableCash()))
                 .positions(positions)
                 .build();
     }
@@ -107,13 +120,19 @@ public final class ApiMapper {
      * @return The {@link AssetPositionApi} response DTO.
      */
     public static AssetPositionApi toApi(AssetPosition position) {
+        Instrument instrument = position.instrument();
+        InstrumentSummaryApi instrumentSummary = instrument != null
+                ? InstrumentSummaryApi.builder()
+                        .id(instrument.id())
+                        .ticker(instrument.ticker())
+                        .build()
+                : null;
+
         return AssetPositionApi.builder()
-                .instrumentId(position.instrumentId())
-                .ticker(position.ticker())
-                .name(position.name())
+                .instrument(instrumentSummary)
                 .quantity(position.quantity())
-                .lastPrice(position.lastPrice())
-                .marketValue(position.marketValue())
+                .lastPrice(toContractMonetaryAmount(position.lastPrice()))
+                .marketValue(toContractMonetaryAmount(position.marketValue()))
                 .totalReturnPercentage(position.totalReturnPercentage())
                 .dailyReturnPercentage(position.dailyReturnPercentage())
                 .build();
@@ -131,8 +150,8 @@ public final class ApiMapper {
                 .ticker(quote.instrument().ticker())
                 .name(quote.instrument().name())
                 .type(InstrumentTypeApi.valueOf(quote.instrument().type().name()))
-                .lastPrice(quote.lastPrice())
-                .previousClose(quote.previousClose())
+                .lastPrice(toContractMonetaryAmount(quote.lastPrice()))
+                .previousClose(toContractMonetaryAmount(quote.previousClose()))
                 .dailyReturnPercentage(quote.dailyReturnPercentage())
                 .build();
     }
@@ -149,11 +168,31 @@ public final class ApiMapper {
                 .instrumentId(order.getInstrumentId())
                 .userId(order.getUserId())
                 .size(order.getSize())
-                .price(order.getPrice())
+                .price(toContractMonetaryAmount(order.getPrice()))
                 .type(OrderTypeApi.valueOf(order.getType().name()))
                 .side(OrderSideApi.valueOf(order.getSide().name()))
                 .status(OrderStatusApi.valueOf(order.getStatus().name()))
                 .datetime(order.getDatetime() != null ? order.getDatetime().format(ISO_DATETIME_FORMATTER) : null)
+                .build();
+    }
+
+    private static MonetaryAmount toDomainMonetaryAmount(com.cocos.trading.api.common.MonetaryAmount contractAmount) {
+        if (contractAmount == null || contractAmount.amount() == null) {
+            return null;
+        }
+        String currency = (contractAmount.currency() != null && !contractAmount.currency().isBlank())
+                ? contractAmount.currency()
+                : MonetaryAmount.ARS_CURRENCY;
+        return MonetaryAmount.of(contractAmount.amount(), currency);
+    }
+
+    private static com.cocos.trading.api.common.MonetaryAmount toContractMonetaryAmount(MonetaryAmount domainAmount) {
+        if (domainAmount == null) {
+            return null;
+        }
+        return com.cocos.trading.api.common.MonetaryAmount.builder()
+                .amount(domainAmount.amount())
+                .currency(domainAmount.currency())
                 .build();
     }
 }

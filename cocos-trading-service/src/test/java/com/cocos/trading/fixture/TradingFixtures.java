@@ -4,13 +4,13 @@ import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
 import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.MarketData;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
 import com.cocos.trading.domain.model.TradeOrder;
 import com.cocos.trading.domain.model.TransferOrder;
 import com.cocos.trading.domain.model.User;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -67,11 +67,11 @@ public final class TradingFixtures {
         return MarketData.builder()
                 .id(100L)
                 .instrumentId(PAMP_INSTRUMENT_ID)
-                .high(new BigDecimal("950.00"))
-                .low(new BigDecimal("900.00"))
-                .open(new BigDecimal("910.00"))
-                .close(new BigDecimal("925.85"))
-                .previousClose(new BigDecimal("906.35"))
+                .high(MonetaryAmount.ars("950.00"))
+                .low(MonetaryAmount.ars("900.00"))
+                .open(MonetaryAmount.ars("910.00"))
+                .close(MonetaryAmount.ars("925.85"))
+                .previousClose(MonetaryAmount.ars("906.35"))
                 .date(LocalDate.of(2024, 7, 15))
                 .build();
     }
@@ -80,11 +80,11 @@ public final class TradingFixtures {
         return MarketData.builder()
                 .id(101L)
                 .instrumentId(METR_INSTRUMENT_ID)
-                .high(new BigDecimal("260.00"))
-                .low(new BigDecimal("240.00"))
-                .open(new BigDecimal("245.00"))
-                .close(new BigDecimal("250.00"))
-                .previousClose(new BigDecimal("250.00"))
+                .high(MonetaryAmount.ars("260.00"))
+                .low(MonetaryAmount.ars("240.00"))
+                .open(MonetaryAmount.ars("245.00"))
+                .close(MonetaryAmount.ars("250.00"))
+                .previousClose(MonetaryAmount.ars("250.00"))
                 .date(LocalDate.of(2024, 7, 15))
                 .build();
     }
@@ -95,7 +95,7 @@ public final class TradingFixtures {
                 .instrumentId(ARS_INSTRUMENT_ID)
                 .userId(DEFAULT_USER_ID)
                 .size(amount)
-                .price(new BigDecimal("1.00"))
+                .price(MonetaryAmount.ONE_ARS)
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_IN)
                 .status(OrderStatus.FILLED)
@@ -109,7 +109,7 @@ public final class TradingFixtures {
                 .instrumentId(ARS_INSTRUMENT_ID)
                 .userId(DEFAULT_USER_ID)
                 .size(amount)
-                .price(new BigDecimal("1.00"))
+                .price(MonetaryAmount.ONE_ARS)
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_OUT)
                 .status(OrderStatus.FILLED)
@@ -123,7 +123,7 @@ public final class TradingFixtures {
                 .instrumentId(instrumentId)
                 .userId(DEFAULT_USER_ID)
                 .size(size)
-                .price(new BigDecimal(price))
+                .price(MonetaryAmount.ars(price))
                 .type(OrderType.MARKET)
                 .side(OrderSide.BUY)
                 .status(OrderStatus.FILLED)
@@ -137,7 +137,7 @@ public final class TradingFixtures {
                 .instrumentId(instrumentId)
                 .userId(DEFAULT_USER_ID)
                 .size(size)
-                .price(new BigDecimal(price))
+                .price(MonetaryAmount.ars(price))
                 .type(OrderType.MARKET)
                 .side(OrderSide.SELL)
                 .status(OrderStatus.FILLED)
@@ -163,7 +163,7 @@ public final class TradingFixtures {
                 .instrumentId(PAMP_INSTRUMENT_ID)
                 .side(OrderSide.BUY)
                 .type(OrderType.MARKET)
-                .amount(new BigDecimal(amount))
+                .amount(MonetaryAmount.ars(amount))
                 .build();
     }
 }

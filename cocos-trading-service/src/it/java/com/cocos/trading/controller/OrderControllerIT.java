@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.cocos.trading.TradingApplicationIT;
 import com.cocos.trading.api.OrderContractApi;
+import com.cocos.trading.api.common.MonetaryAmount;
 import com.cocos.trading.api.common.OrderSideApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import com.cocos.trading.api.request.OrderCreateRequestApi;
@@ -146,7 +147,8 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$.side").value("BUY"))
                 .andExpect(jsonPath("$.type").value("MARKET"))
                 .andExpect(jsonPath("$.size").value(10))
-                .andExpect(jsonPath("$.price").value(925.85))
+                .andExpect(jsonPath("$.price.amount").value(925.85))
+                .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("FILLED"));
 
         List<OrderJpaEntity> persistedOrders = orderRepository.findAll();
@@ -163,7 +165,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 OrderSideApi.BUY,
                 OrderTypeApi.MARKET,
                 null,
-                new BigDecimal("10000.00"),
+                MonetaryAmount.ars(new BigDecimal("10000.00")),
                 null
         );
 
@@ -173,7 +175,8 @@ class OrderControllerIT extends TradingApplicationIT {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.size").value(10))
-                .andExpect(jsonPath("$.price").value(925.85))
+                .andExpect(jsonPath("$.price.amount").value(925.85))
+                .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("FILLED"));
     }
 
@@ -197,7 +200,8 @@ class OrderControllerIT extends TradingApplicationIT {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.size").value(100))
-                .andExpect(jsonPath("$.price").value(925.85))
+                .andExpect(jsonPath("$.price.amount").value(925.85))
+                .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("REJECTED"));
 
         List<OrderJpaEntity> rejectedOrders = orderRepository.findByUserIdAndStatusOrderByDatetimeAscIdAsc(
@@ -241,7 +245,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 OrderTypeApi.LIMIT,
                 10,
                 null,
-                new BigDecimal("900.00")
+                MonetaryAmount.ars(new BigDecimal("900.00"))
         );
 
         String responseJson = mockMvc.perform(post("/orders")
@@ -250,7 +254,8 @@ class OrderControllerIT extends TradingApplicationIT {
                         .content(objectMapper.writeValueAsString(limitRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("NEW"))
-                .andExpect(jsonPath("$.price").value(900.00))
+                .andExpect(jsonPath("$.price.amount").value(900.00))
+                .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -264,8 +269,8 @@ class OrderControllerIT extends TradingApplicationIT {
     }
 
     @Test
-    @DisplayName("Should return 400 Bad Request when LIMIT order is missing price")
-    void shouldReturnBadRequestWhenLimitOrderMissingPrice() throws Exception {
+    @DisplayName("Should return 400 Bad Request when LIMIT order is missing price or when currency is not ARS")
+    void shouldReturnBadRequestWhenLimitOrderMissingPriceOrCurrencyInvalid() throws Exception {
         OrderCreateRequestApi invalidLimitRequest = new OrderCreateRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
@@ -280,6 +285,23 @@ class OrderControllerIT extends TradingApplicationIT {
                         .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidLimitRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Bad Request"));
+
+        OrderCreateRequestApi unsupportedCurrencyRequest = new OrderCreateRequestApi(
+                savedUser.getId(),
+                pampInstrument.getId(),
+                OrderSideApi.BUY,
+                OrderTypeApi.LIMIT,
+                10,
+                null,
+                new MonetaryAmount(new BigDecimal("900.00"), "USD")
+        );
+
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(unsupportedCurrencyRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Bad Request"));
     }
@@ -331,7 +353,8 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.side").value("CASH_OUT"))
                 .andExpect(jsonPath("$.size").value(20000))
-                .andExpect(jsonPath("$.price").value(1.00))
+                .andExpect(jsonPath("$.price.amount").value(1.00))
+                .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("FILLED"));
 
         // 2. Excess CASH_OUT of 40,000 ARS (> 30,000 ARS remaining availableCash) -> 409 BusinessRuleViolationProblem
@@ -484,4 +507,3 @@ class OrderControllerIT extends TradingApplicationIT {
         assertEquals(2, orderRepository.findAll().size());
     }
 }
-

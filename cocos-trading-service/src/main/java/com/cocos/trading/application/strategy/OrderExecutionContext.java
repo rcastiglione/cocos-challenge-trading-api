@@ -3,7 +3,7 @@ package com.cocos.trading.application.strategy;
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
 import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.MarketData;
-import java.math.BigDecimal;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import java.util.Optional;
 
 /**
@@ -13,15 +13,14 @@ import java.util.Optional;
  * @param command          The incoming order placement command.
  * @param instrument       The target financial instrument.
  * @param latestMarketData The latest market data for the instrument (if applicable).
- * @param availableCash    The user's current available ARS cash balance.
+ * @param availableCash    The user's current available ARS cash balance as a {@link MonetaryAmount}.
  * @param availableShares  The user's current net share holdings for the instrument.
  */
 public record OrderExecutionContext(
         PlaceOrderCommand command,
         Instrument instrument,
         Optional<MarketData> latestMarketData,
-        BigDecimal availableCash,
+        MonetaryAmount availableCash,
         int availableShares
 ) {
 }
-

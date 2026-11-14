@@ -1,9 +1,9 @@
 package com.cocos.trading.api.request;
 
+import com.cocos.trading.api.common.MonetaryAmount;
 import com.cocos.trading.api.common.OrderSideApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.math.BigDecimal;
 import lombok.Builder;
 
 /**
@@ -37,11 +37,10 @@ public record OrderCreateRequestApi(
         @Schema(description = "Exact quantity of shares (or ARS units for MONEDA) to trade", example = "10")
         Integer size,
 
-        @Schema(description = "Total investment amount in ARS (automatically calculates maximum whole shares)", example = "15000.00")
-        BigDecimal amount,
+        @Schema(description = "Total investment amount in ARS (automatically calculates maximum whole shares)")
+        MonetaryAmount amount,
 
-        @Schema(description = "Limit price in ARS (required for LIMIT orders)", example = "925.85")
-        BigDecimal price
+        @Schema(description = "Limit price in ARS (required for LIMIT orders)")
+        MonetaryAmount price
 ) {
 }
-

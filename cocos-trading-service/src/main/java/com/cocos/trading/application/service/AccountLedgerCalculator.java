@@ -1,10 +1,9 @@
 package com.cocos.trading.application.service;
 
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.TradeOrder;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 
 /**
@@ -12,8 +11,6 @@ import java.util.List;
  * from a chronological list of {@code FILLED} orders.
  */
 public final class AccountLedgerCalculator {
-
-    private static final int CURRENCY_SCALE = 2;
 
     private AccountLedgerCalculator() {
     }
@@ -23,12 +20,12 @@ public final class AccountLedgerCalculator {
      * by summing each order's polymorphic {@link Order#getCashImpact()}.
      *
      * @param filledOrders Chronological list of {@code FILLED} orders.
-     * @return Net available cash in ARS rounded to 2 decimal places.
+     * @return Net available cash as an {@code ARS} {@link MonetaryAmount}.
      */
-    public static BigDecimal calculateAvailableCash(List<Order> filledOrders) {
-        BigDecimal cash = BigDecimal.ZERO;
+    public static MonetaryAmount calculateAvailableCash(List<Order> filledOrders) {
+        MonetaryAmount cash = MonetaryAmount.ZERO_ARS;
         if (filledOrders == null) {
-            return cash.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+            return cash;
         }
 
         for (Order order : filledOrders) {
@@ -37,7 +34,7 @@ public final class AccountLedgerCalculator {
             }
             cash = cash.add(order.getCashImpact());
         }
-        return cash.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+        return cash;
     }
 
     /**

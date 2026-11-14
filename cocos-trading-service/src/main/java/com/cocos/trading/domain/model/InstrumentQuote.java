@@ -14,9 +14,8 @@ import lombok.Builder;
 @Builder
 public record InstrumentQuote(
         Instrument instrument,
-        BigDecimal lastPrice,
-        BigDecimal previousClose,
+        MonetaryAmount lastPrice,
+        MonetaryAmount previousClose,
         BigDecimal dailyReturnPercentage
 ) {
 }
-

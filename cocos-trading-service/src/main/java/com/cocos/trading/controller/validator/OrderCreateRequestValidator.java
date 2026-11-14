@@ -2,13 +2,12 @@ package com.cocos.trading.controller.validator;
 
 import com.cocos.trading.api.common.OrderTypeApi;
 import com.cocos.trading.api.request.OrderCreateRequestApi;
-import java.math.BigDecimal;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
 
 /**
  * Spring {@link Validator} for {@link OrderCreateRequestApi}.
- * Enforces required fields, positive quantities/amounts, and LIMIT order price rules.
+ * Enforces required fields, positive quantities/amounts, currency invariants, and LIMIT order price rules.
  */
 public class OrderCreateRequestValidator implements Validator {
 
@@ -86,12 +85,12 @@ public class OrderCreateRequestValidator implements Validator {
                 "size must be greater than 0."
         );
 
-        ValidatorUtils.validatePositiveBigDecimal(
+        ValidatorUtils.validateMonetaryAmount(
                 errors,
                 request.amount(),
                 "amount",
                 "amount.invalid",
-                "amount must be greater than 0."
+                "amount.amount must be greater than 0."
         );
 
         if (request.type() == OrderTypeApi.LIMIT) {
@@ -101,14 +100,15 @@ public class OrderCreateRequestValidator implements Validator {
                         "price.required",
                         "price is required for LIMIT orders."
                 );
-            } else if (request.price().compareTo(BigDecimal.ZERO) <= 0) {
-                errors.rejectValue(
+            } else {
+                ValidatorUtils.validateMonetaryAmount(
+                        errors,
+                        request.price(),
                         "price",
                         "price.invalid",
-                        "price must be greater than 0."
+                        "price.amount must be greater than 0."
                 );
             }
         }
     }
 }
-

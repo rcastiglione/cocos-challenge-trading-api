@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Cocos Capital Trading Engine API",
-    "description": "Postman Collection for the Cocos Challenge Transactional Trading Engine API (Portfolio Valuation, Instrument Search, and MARKET/LIMIT Order Routing).",
+    "description": "Postman Collection for the Cocos Challenge Transactional Trading Engine API (Portfolio Valuation with Money Pattern & Semantic Entity Grouping, Instrument Search, and Idempotent MARKET/LIMIT Order Routing).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -22,8 +22,32 @@
           "host": ["{{baseUrl}}"],
           "path": ["portfolios", "1"]
         },
-        "description": "Retrieves the user's total account value in ARS, available cash for trading, and held equity positions with market value and total/daily return percentages."
-      }
+        "description": "Retrieves the user's portfolio with semantic grouping of user ({id, accountNumber}) and position instrument ({id, ticker}), alongside MonetaryAmount ({amount, currency: 'ARS'}) valuations."
+      },
+      "response": [
+        {
+          "name": "200 OK — Portfolio Valuation (Money Pattern & Semantic Entity Grouping)",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/portfolios/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["portfolios", "1"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"totalAccountValue\": { \"amount\": 1697459.88, \"currency\": \"ARS\" },\n  \"availableCash\": { \"amount\": 1286738.70, \"currency\": \"ARS\" },\n  \"positions\": [\n    {\n      \"instrument\": {\n        \"id\": 47,\n        \"ticker\": \"PAMP\"\n      },\n      \"quantity\": 298,\n      \"lastPrice\": { \"amount\": 925.85, \"currency\": \"ARS\" },\n      \"marketValue\": { \"amount\": 275903.30, \"currency\": \"ARS\" },\n      \"totalReturnPercentage\": 2.15,\n      \"dailyReturnPercentage\": 1.55\n    }\n  ]\n}"
+        }
+      ]
     },
     {
       "name": "2. Search Instruments (General Query)",
@@ -41,7 +65,7 @@
             }
           ]
         },
-        "description": "Searches instruments matching ticker or name (case-insensitive substring match)."
+        "description": "Searches instruments matching ticker or name (case-insensitive substring match), returning lastPrice and previousClose as MonetaryAmount ({amount, currency: 'ARS'})."
       }
     },
     {
@@ -90,7 +114,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Places a MARKET BUY order for an exact number of shares using the latest close price. Transitions immediately to FILLED (or REJECTED if insufficient funds)."
+        "description": "Places a MARKET BUY order for an exact number of shares using the latest close price. Transitions immediately to FILLED (or REJECTED if insufficient funds) and returns price as MonetaryAmount."
       }
     },
     {
@@ -110,14 +134,14 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"amount\": 15000.00\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"amount\": {\n    \"amount\": 15000.00,\n    \"currency\": \"ARS\"\n  }\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Places a MARKET BUY order by total ARS amount, automatically calculating the maximum whole shares (floor(amount / closePrice))."
+        "description": "Places a MARKET BUY order by total ARS MonetaryAmount, automatically calculating the maximum whole shares (floor(amount / closePrice))."
       }
     },
     {
@@ -137,14 +161,14 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"size\": 5,\n  \"price\": 900.00\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"size\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  }\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Places a LIMIT BUY order with a target price. Stored in status NEW if funds are sufficient."
+        "description": "Places a LIMIT BUY order with a target MonetaryAmount price ({amount, currency: 'ARS'}). Stored in status NEW if funds are sufficient."
       }
     },
     {
@@ -243,4 +267,3 @@
     }
   ]
 }
-

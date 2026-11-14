@@ -26,4 +26,3 @@ public record Instrument(
         return type == InstrumentType.MONEDA;
     }
 }
-

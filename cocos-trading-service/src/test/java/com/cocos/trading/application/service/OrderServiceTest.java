@@ -25,6 +25,7 @@ import com.cocos.trading.application.strategy.MarketOrderExecutionStrategy;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.exception.DuplicateOrderException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
@@ -35,7 +36,6 @@ import com.cocos.trading.fixture.TradingFixtures;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -123,7 +123,7 @@ class OrderServiceTest {
         assertInstanceOf(TradeOrder.class, result);
         assertEquals(OrderStatus.FILLED, result.getStatus());
         assertEquals(10, result.getSize());
-        assertEquals(new BigDecimal("925.85"), result.getPrice());
+        assertEquals(MonetaryAmount.ars("925.85"), result.getPrice());
         verify(orderRepositoryPort).save(any(Order.class));
 
         Counter filledCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
@@ -161,7 +161,7 @@ class OrderServiceTest {
         assertInstanceOf(TradeOrder.class, result);
         assertEquals(OrderStatus.FILLED, result.getStatus());
         assertEquals(10, result.getSize());
-        assertEquals(new BigDecimal("925.85"), result.getPrice());
+        assertEquals(MonetaryAmount.ars("925.85"), result.getPrice());
     }
 
     @Test
@@ -236,7 +236,7 @@ class OrderServiceTest {
                 .side(OrderSide.BUY)
                 .type(OrderType.LIMIT)
                 .size(10)
-                .price(new BigDecimal("900.00"))
+                .price(MonetaryAmount.ars("900.00"))
                 .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
@@ -254,7 +254,7 @@ class OrderServiceTest {
 
         assertEquals(OrderStatus.NEW, result.getStatus());
         assertEquals(10, result.getSize());
-        assertEquals(new BigDecimal("900.00"), result.getPrice());
+        assertEquals(MonetaryAmount.ars("900.00"), result.getPrice());
 
         Counter newCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
                 .tags("status", "NEW", "type", "LIMIT", "side", "BUY")
@@ -271,7 +271,7 @@ class OrderServiceTest {
                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                 .userId(TradingFixtures.DEFAULT_USER_ID)
                 .size(10)
-                .price(new BigDecimal("900.00"))
+                .price(MonetaryAmount.ars("900.00"))
                 .type(OrderType.LIMIT)
                 .side(OrderSide.BUY)
                 .status(OrderStatus.NEW)
@@ -377,8 +377,8 @@ class OrderServiceTest {
         assertEquals(OrderStatus.FILLED, result.getStatus());
         assertEquals(OrderSide.CASH_OUT, result.getSide());
         assertEquals(20_000, result.getSize());
-        assertEquals(new BigDecimal("1.00"), result.getPrice());
-        assertEquals(new BigDecimal("-20000.00"), result.getCashImpact());
+        assertEquals(MonetaryAmount.ONE_ARS, result.getPrice());
+        assertEquals(MonetaryAmount.ars("-20000.00"), result.getCashImpact());
 
         Counter cashOutCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
                 .tags("status", "FILLED", "type", "MARKET", "side", "CASH_OUT")

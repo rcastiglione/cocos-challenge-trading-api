@@ -16,10 +16,10 @@ import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.MarketData;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderStatus;
 import io.micrometer.core.instrument.Timer;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -94,7 +94,7 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
                 : marketDataRepositoryPort.findLatestByInstrumentId(instrument.id());
 
         List<Order> filledOrders = orderRepositoryPort.findByUserIdAndStatus(command.userId(), OrderStatus.FILLED);
-        BigDecimal availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
+        MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
         int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledOrders, instrument.id());
 
         OrderExecutionContext context = new OrderExecutionContext(

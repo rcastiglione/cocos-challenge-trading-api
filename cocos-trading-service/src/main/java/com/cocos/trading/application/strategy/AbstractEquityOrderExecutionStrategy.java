@@ -2,12 +2,11 @@ package com.cocos.trading.application.strategy;
 
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.TradeOrder;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 /**
@@ -16,15 +15,13 @@ import java.time.LocalDateTime;
  */
 public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecutionStrategy {
 
-    protected static final int CURRENCY_SCALE = 2;
-
     /**
      * Resolves the unit execution price for the order (e.g., market close price or limit price).
      *
      * @param context The order execution context.
-     * @return The resolved unit price in ARS.
+     * @return The resolved unit price as a {@link MonetaryAmount}.
      */
-    protected abstract BigDecimal resolveExecutionPrice(OrderExecutionContext context);
+    protected abstract MonetaryAmount resolveExecutionPrice(OrderExecutionContext context);
 
     /**
      * Returns the target status when the order passes all buying-power/holdings validations
@@ -43,9 +40,7 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
             );
         }
 
-        BigDecimal executionPrice = resolveExecutionPrice(context)
-                .setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
-
+        MonetaryAmount executionPrice = resolveExecutionPrice(context);
         int resolvedSize = resolveShareSize(command, executionPrice);
         OrderStatus status = determineStatus(context, executionPrice, resolvedSize);
 
@@ -61,11 +56,11 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
                 .build();
     }
 
-    private int resolveShareSize(PlaceOrderCommand command, BigDecimal executionPrice) {
+    private int resolveShareSize(PlaceOrderCommand command, MonetaryAmount executionPrice) {
         if (command.size() != null && command.size() > 0) {
             return command.size();
         }
-        if (command.amount() != null && command.amount().compareTo(BigDecimal.ZERO) > 0) {
+        if (command.amount() != null && command.amount().isPositive()) {
             return Order.calculateMaxShareSize(command.amount(), executionPrice);
         }
         return 0;
@@ -73,7 +68,7 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
 
     private OrderStatus determineStatus(
             OrderExecutionContext context,
-            BigDecimal executionPrice,
+            MonetaryAmount executionPrice,
             int resolvedSize
     ) {
         if (resolvedSize <= 0) {
@@ -82,9 +77,8 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
 
         OrderSide side = context.command().side();
         if (side == OrderSide.BUY) {
-            BigDecimal totalCost = executionPrice.multiply(BigDecimal.valueOf(resolvedSize))
-                    .setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
-            if (context.availableCash().compareTo(totalCost) < 0) {
+            MonetaryAmount totalCost = executionPrice.multiply(resolvedSize);
+            if (context.availableCash().isLessThan(totalCost)) {
                 return OrderStatus.REJECTED;
             }
             return getAcceptedStatus();

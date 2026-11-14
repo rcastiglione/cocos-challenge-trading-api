@@ -1,8 +1,6 @@
 package com.cocos.trading.domain.model;
 
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -24,7 +22,7 @@ public final class TradeOrder extends Order {
             Long instrumentId,
             Long userId,
             Integer size,
-            BigDecimal price,
+            MonetaryAmount price,
             OrderType type,
             OrderSide side,
             OrderStatus status,
@@ -48,11 +46,11 @@ public final class TradeOrder extends Order {
     }
 
     @Override
-    public BigDecimal getCashImpact() {
+    public MonetaryAmount getCashImpact() {
         if (getSize() == null || getPrice() == null) {
-            return BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+            return MonetaryAmount.ZERO_ARS;
         }
-        BigDecimal total = getTotalAmount();
+        MonetaryAmount total = getTotalAmount();
         return getSide() == OrderSide.SELL ? total : total.negate();
     }
 

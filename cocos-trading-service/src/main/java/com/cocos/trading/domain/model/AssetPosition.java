@@ -6,9 +6,7 @@ import lombok.Builder;
 /**
  * Domain value object representing an active equity position in a user's portfolio.
  *
- * @param instrumentId          Unique identifier of the instrument.
- * @param ticker                Ticker symbol of the instrument.
- * @param name                  Name of the instrument.
+ * @param instrument            The financial {@link Instrument} held in the position.
  * @param quantity              Net quantity of shares held.
  * @param lastPrice             Latest market close price in ARS.
  * @param marketValue           Total monetary value of the position in ARS ({@code quantity * lastPrice}).
@@ -17,14 +15,11 @@ import lombok.Builder;
  */
 @Builder
 public record AssetPosition(
-        Long instrumentId,
-        String ticker,
-        String name,
+        Instrument instrument,
         Integer quantity,
-        BigDecimal lastPrice,
-        BigDecimal marketValue,
+        MonetaryAmount lastPrice,
+        MonetaryAmount marketValue,
         BigDecimal totalReturnPercentage,
         BigDecimal dailyReturnPercentage
 ) {
 }
-

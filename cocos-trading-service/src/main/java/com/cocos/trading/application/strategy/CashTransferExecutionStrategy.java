@@ -2,11 +2,11 @@ package com.cocos.trading.application.strategy;
 
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.TransferOrder;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 
@@ -51,7 +51,7 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
         if (command.size() != null && command.size() > 0) {
             return command.size();
         }
-        if (command.amount() != null && command.amount().compareTo(BigDecimal.ZERO) > 0) {
+        if (command.amount() != null && command.amount().isPositive()) {
             return Order.calculateMaxShareSize(command.amount(), TransferOrder.UNIT_CASH_PRICE);
         }
         return 0;
@@ -60,15 +60,17 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
     private void validateCashWithdrawal(OrderExecutionContext context, int resolvedSize) {
         PlaceOrderCommand command = context.command();
         if (command.side() == OrderSide.CASH_OUT) {
-            BigDecimal withdrawalAmount = command.amount() != null && command.amount().compareTo(BigDecimal.ZERO) > 0
+            MonetaryAmount withdrawalAmount = command.amount() != null && command.amount().isPositive()
                     ? command.amount()
-                    : TransferOrder.UNIT_CASH_PRICE.multiply(BigDecimal.valueOf(resolvedSize));
-            if (context.availableCash().compareTo(withdrawalAmount) < 0) {
+                    : TransferOrder.UNIT_CASH_PRICE.multiply(resolvedSize);
+            if (context.availableCash().isLessThan(withdrawalAmount)) {
                 throw new BusinessRuleViolationException(
                         String.format(
-                                "Insufficient available cash for CASH_OUT transfer: requested=%s ARS, available=%s ARS.",
-                                withdrawalAmount,
-                                context.availableCash()
+                                "Insufficient available cash for CASH_OUT transfer: requested=%s %s, available=%s %s.",
+                                withdrawalAmount.amount(),
+                                withdrawalAmount.currency(),
+                                context.availableCash().amount(),
+                                context.availableCash().currency()
                         )
                 );
             }

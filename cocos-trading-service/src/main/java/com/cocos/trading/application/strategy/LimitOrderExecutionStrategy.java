@@ -1,9 +1,9 @@
 package com.cocos.trading.application.strategy;
 
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
-import java.math.BigDecimal;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,9 +21,9 @@ public class LimitOrderExecutionStrategy extends AbstractEquityOrderExecutionStr
     }
 
     @Override
-    protected BigDecimal resolveExecutionPrice(OrderExecutionContext context) {
-        BigDecimal price = context.command().price();
-        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+    protected MonetaryAmount resolveExecutionPrice(OrderExecutionContext context) {
+        MonetaryAmount price = context.command().price();
+        if (price == null || price.isZeroOrNegative()) {
             throw new BusinessRuleViolationException("Price is required and must be greater than 0 for LIMIT orders.");
         }
         return price;
@@ -34,4 +34,3 @@ public class LimitOrderExecutionStrategy extends AbstractEquityOrderExecutionStr
         return OrderStatus.NEW;
     }
 }
-

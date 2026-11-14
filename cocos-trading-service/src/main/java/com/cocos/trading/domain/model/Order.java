@@ -1,7 +1,5 @@
 package com.cocos.trading.domain.model;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -18,13 +16,13 @@ import lombok.experimental.SuperBuilder;
 @SuperBuilder(toBuilder = true)
 public abstract class Order {
 
-    protected static final int CURRENCY_SCALE = 2;
+    protected static final int CURRENCY_SCALE = MonetaryAmount.CURRENCY_SCALE;
 
     private final Long id;
     private final Long instrumentId;
     private final Long userId;
     private final Integer size;
-    private final BigDecimal price;
+    private final MonetaryAmount price;
     private final OrderType type;
     private final OrderSide side;
     private final OrderStatus status;
@@ -35,7 +33,7 @@ public abstract class Order {
             Long instrumentId,
             Long userId,
             Integer size,
-            BigDecimal price,
+            MonetaryAmount price,
             OrderType type,
             OrderSide side,
             OrderStatus status,
@@ -53,39 +51,38 @@ public abstract class Order {
     }
 
     /**
-     * Calculates the maximum whole number of shares/units that can be traded for a given total ARS amount
+     * Calculates the maximum whole number of shares/units that can be traded for a given total investment amount
      * and unit price (fractional shares are not permitted).
      *
-     * @param amount    Total investment amount in ARS.
-     * @param unitPrice Price per share/unit in ARS.
+     * @param amount    Total investment amount as a {@link MonetaryAmount}.
+     * @param unitPrice Price per share/unit as a {@link MonetaryAmount}.
      * @return Maximum integer number of shares ({@code floor(amount / unitPrice)}).
      */
-    public static int calculateMaxShareSize(BigDecimal amount, BigDecimal unitPrice) {
-        if (amount == null || unitPrice == null || amount.compareTo(BigDecimal.ZERO) <= 0
-                || unitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+    public static int calculateMaxShareSize(MonetaryAmount amount, MonetaryAmount unitPrice) {
+        if (amount == null || unitPrice == null) {
             return 0;
         }
-        return amount.divideToIntegralValue(unitPrice).intValueExact();
+        return amount.divideToIntegralShares(unitPrice);
     }
 
     /**
      * Calculates the total monetary value of the order ({@code size * price}).
      *
-     * @return Total order amount in ARS rounded to 2 decimal places.
+     * @return Total order amount as a {@link MonetaryAmount}.
      */
-    public BigDecimal getTotalAmount() {
+    public MonetaryAmount getTotalAmount() {
         if (size == null || price == null) {
-            return BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+            return MonetaryAmount.ZERO_ARS;
         }
-        return price.multiply(BigDecimal.valueOf(size)).setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+        return price.multiply(size);
     }
 
     /**
-     * Calculates the signed ARS cash balance impact of this order when {@link OrderStatus#FILLED}.
+     * Calculates the signed cash balance impact of this order when {@link OrderStatus#FILLED}.
      *
-     * @return Signed cash delta in ARS ({@code +} for inflows/sales, {@code -} for outflows/purchases).
+     * @return Signed cash delta as a {@link MonetaryAmount} ({@code +} for inflows/sales, {@code -} for outflows/purchases).
      */
-    public abstract BigDecimal getCashImpact();
+    public abstract MonetaryAmount getCashImpact();
 
     /**
      * Returns a copy of this order transitioned to {@link OrderStatus#CANCELLED}.

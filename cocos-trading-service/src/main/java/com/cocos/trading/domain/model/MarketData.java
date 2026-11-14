@@ -21,11 +21,11 @@ import lombok.Builder;
 public record MarketData(
         Long id,
         Long instrumentId,
-        BigDecimal high,
-        BigDecimal low,
-        BigDecimal open,
-        BigDecimal close,
-        BigDecimal previousClose,
+        MonetaryAmount high,
+        MonetaryAmount low,
+        MonetaryAmount open,
+        MonetaryAmount close,
+        MonetaryAmount previousClose,
         LocalDate date
 ) {
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
@@ -39,13 +39,12 @@ public record MarketData(
      * @return Daily return percentage rounded to 2 decimal places, or {@code 0.00} if prices are missing/zero.
      */
     public BigDecimal calculateDailyReturnPercentage() {
-        if (close == null || previousClose == null || previousClose.compareTo(BigDecimal.ZERO) == 0) {
+        if (close == null || previousClose == null || previousClose.isZeroOrNegative()) {
             return BigDecimal.ZERO.setScale(DISPLAY_SCALE, RoundingMode.HALF_UP);
         }
-        return close.subtract(previousClose)
-                .divide(previousClose, CALCULATION_SCALE, RoundingMode.HALF_UP)
+        return close.amount().subtract(previousClose.amount())
+                .divide(previousClose.amount(), CALCULATION_SCALE, RoundingMode.HALF_UP)
                 .multiply(ONE_HUNDRED)
                 .setScale(DISPLAY_SCALE, RoundingMode.HALF_UP);
     }
 }
-

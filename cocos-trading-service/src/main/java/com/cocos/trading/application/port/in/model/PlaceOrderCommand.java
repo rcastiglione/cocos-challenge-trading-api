@@ -1,8 +1,8 @@
 package com.cocos.trading.application.port.in.model;
 
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderType;
-import java.math.BigDecimal;
 import java.util.UUID;
 import lombok.Builder;
 
@@ -15,8 +15,8 @@ import lombok.Builder;
  * @param side           Order side ({@link OrderSide#BUY}, {@link OrderSide#SELL}, {@link OrderSide#CASH_IN}, {@link OrderSide#CASH_OUT}).
  * @param type           Order execution type ({@link OrderType#MARKET} or {@link OrderType#LIMIT}).
  * @param size           Optional exact quantity of shares/units.
- * @param amount         Optional total investment amount in ARS.
- * @param price          Optional target price in ARS (required for {@link OrderType#LIMIT}).
+ * @param amount         Optional total investment amount in ARS as a {@link MonetaryAmount}.
+ * @param price          Optional target price in ARS as a {@link MonetaryAmount} (required for {@link OrderType#LIMIT}).
  */
 @Builder
 public record PlaceOrderCommand(
@@ -26,8 +26,7 @@ public record PlaceOrderCommand(
         OrderSide side,
         OrderType type,
         Integer size,
-        BigDecimal amount,
-        BigDecimal price
+        MonetaryAmount amount,
+        MonetaryAmount price
 ) {
 }
-

@@ -7,6 +7,7 @@ import com.cocos.trading.application.port.out.MarketDataRepositoryPort;
 import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentQuote;
 import com.cocos.trading.domain.model.MarketData;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -26,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class InstrumentService implements SearchInstrumentsUseCase {
 
-    private static final int CURRENCY_SCALE = 2;
+    private static final int CURRENCY_SCALE = MonetaryAmount.CURRENCY_SCALE;
 
     private final InstrumentRepositoryPort instrumentRepositoryPort;
     private final MarketDataRepositoryPort marketDataRepositoryPort;
@@ -53,8 +54,8 @@ public class InstrumentService implements SearchInstrumentsUseCase {
 
     private InstrumentQuote toInstrumentQuote(Instrument instrument, MarketData marketData) {
         if (marketData == null) {
-            BigDecimal defaultPrice = instrument.isCurrency()
-                    ? BigDecimal.ONE.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
+            MonetaryAmount defaultPrice = instrument.isCurrency()
+                    ? MonetaryAmount.ONE_ARS
                     : null;
             BigDecimal zeroReturn = instrument.isCurrency()
                     ? BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
@@ -66,16 +67,10 @@ public class InstrumentService implements SearchInstrumentsUseCase {
                     .dailyReturnPercentage(zeroReturn)
                     .build();
         }
-        BigDecimal close = marketData.close() != null
-                ? marketData.close().setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
-                : null;
-        BigDecimal previousClose = marketData.previousClose() != null
-                ? marketData.previousClose().setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
-                : null;
         return InstrumentQuote.builder()
                 .instrument(instrument)
-                .lastPrice(close)
-                .previousClose(previousClose)
+                .lastPrice(marketData.close())
+                .previousClose(marketData.previousClose())
                 .dailyReturnPercentage(marketData.calculateDailyReturnPercentage())
                 .build();
     }

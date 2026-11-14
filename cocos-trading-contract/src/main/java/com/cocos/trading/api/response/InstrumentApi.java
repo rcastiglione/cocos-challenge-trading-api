@@ -1,6 +1,7 @@
 package com.cocos.trading.api.response;
 
 import com.cocos.trading.api.common.InstrumentTypeApi;
+import com.cocos.trading.api.common.MonetaryAmount;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import lombok.Builder;
@@ -31,14 +32,13 @@ public record InstrumentApi(
         @Schema(description = "Instrument type", example = "ACCIONES")
         InstrumentTypeApi type,
 
-        @Schema(description = "Latest market close price in ARS", example = "925.85")
-        BigDecimal lastPrice,
+        @Schema(description = "Latest market close price in ARS")
+        MonetaryAmount lastPrice,
 
-        @Schema(description = "Previous market close price in ARS", example = "906.35")
-        BigDecimal previousClose,
+        @Schema(description = "Previous market close price in ARS")
+        MonetaryAmount previousClose,
 
         @Schema(description = "Daily return percentage (%)", example = "2.15")
         BigDecimal dailyReturnPercentage
 ) {
 }
-

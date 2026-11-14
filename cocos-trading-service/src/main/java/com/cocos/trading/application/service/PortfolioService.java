@@ -10,6 +10,7 @@ import com.cocos.trading.domain.model.AssetPosition;
 import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.MarketData;
+import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
@@ -41,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PortfolioService implements GetPortfolioUseCase {
 
-    private static final int CURRENCY_SCALE = 2;
+    private static final int CURRENCY_SCALE = MonetaryAmount.CURRENCY_SCALE;
     private static final int CALCULATION_SCALE = 6;
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
 
@@ -58,7 +59,7 @@ public class PortfolioService implements GetPortfolioUseCase {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
         List<Order> filledOrders = orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED);
-        BigDecimal availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
+        MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
 
         Set<Long> tradedInstrumentIds = filledOrders.stream()
                 .map(Order::getInstrumentId)
@@ -92,7 +93,7 @@ public class PortfolioService implements GetPortfolioUseCase {
         }
 
         List<AssetPosition> positions = new ArrayList<>();
-        BigDecimal totalPositionsValue = BigDecimal.ZERO;
+        MonetaryAmount totalPositionsValue = MonetaryAmount.ZERO_ARS;
 
         for (Map.Entry<Long, PositionAccumulator> entry : accumulators.entrySet()) {
             Long instrumentId = entry.getKey();
@@ -104,22 +105,19 @@ public class PortfolioService implements GetPortfolioUseCase {
             Instrument instrument = instrumentsById.get(instrumentId);
             MarketData marketData = latestMarketDataById.get(instrumentId);
 
-            BigDecimal lastPrice = (marketData != null && marketData.close() != null)
-                    ? marketData.close().setScale(CURRENCY_SCALE, RoundingMode.HALF_UP)
-                    : acc.averageCost.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+            MonetaryAmount lastPrice = (marketData != null && marketData.close() != null)
+                    ? marketData.close()
+                    : MonetaryAmount.ars(acc.averageCost);
 
-            BigDecimal marketValue = lastPrice.multiply(BigDecimal.valueOf(acc.quantity))
-                    .setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+            MonetaryAmount marketValue = lastPrice.multiply(acc.quantity);
 
-            BigDecimal totalReturnPercentage = calculateTotalReturnPercentage(lastPrice, acc.averageCost);
+            BigDecimal totalReturnPercentage = calculateTotalReturnPercentage(lastPrice.amount(), acc.averageCost);
             BigDecimal dailyReturnPercentage = marketData != null
                     ? marketData.calculateDailyReturnPercentage()
                     : BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
 
             positions.add(AssetPosition.builder()
-                    .instrumentId(instrument.id())
-                    .ticker(instrument.ticker())
-                    .name(instrument.name())
+                    .instrument(instrument)
                     .quantity(acc.quantity)
                     .lastPrice(lastPrice)
                     .marketValue(marketValue)
@@ -130,14 +128,12 @@ public class PortfolioService implements GetPortfolioUseCase {
             totalPositionsValue = totalPositionsValue.add(marketValue);
         }
 
-        positions.sort(Comparator.comparing(AssetPosition::ticker));
+        positions.sort(Comparator.comparing(pos -> pos.instrument().ticker()));
 
-        BigDecimal totalAccountValue = availableCash.add(totalPositionsValue)
-                .setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+        MonetaryAmount totalAccountValue = availableCash.add(totalPositionsValue);
 
         return Portfolio.builder()
-                .userId(user.id())
-                .accountNumber(user.accountNumber())
+                .user(user)
                 .totalAccountValue(totalAccountValue)
                 .availableCash(availableCash)
                 .positions(positions)
@@ -167,7 +163,7 @@ public class PortfolioService implements GetPortfolioUseCase {
                 return;
             }
             if (order.getSide() == OrderSide.BUY) {
-                BigDecimal orderCost = order.getPrice().multiply(BigDecimal.valueOf(order.getSize()));
+                BigDecimal orderCost = order.getPrice().amount().multiply(BigDecimal.valueOf(order.getSize()));
                 totalCostBasis = totalCostBasis.add(orderCost);
                 quantity += order.getSize();
                 averageCost = totalCostBasis.divide(BigDecimal.valueOf(quantity), CALCULATION_SCALE, RoundingMode.HALF_UP);

@@ -1,8 +1,6 @@
 package com.cocos.trading.domain.model;
 
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -19,14 +17,14 @@ import lombok.experimental.SuperBuilder;
 @SuperBuilder(toBuilder = true)
 public final class TransferOrder extends Order {
 
-    public static final BigDecimal UNIT_CASH_PRICE = BigDecimal.ONE.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+    public static final MonetaryAmount UNIT_CASH_PRICE = MonetaryAmount.ONE_ARS;
 
     public TransferOrder(
             Long id,
             Long instrumentId,
             Long userId,
             Integer size,
-            BigDecimal price,
+            MonetaryAmount price,
             OrderType type,
             OrderSide side,
             OrderStatus status,
@@ -60,13 +58,12 @@ public final class TransferOrder extends Order {
     }
 
     @Override
-    public BigDecimal getCashImpact() {
+    public MonetaryAmount getCashImpact() {
         if (getSize() == null) {
-            return BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+            return MonetaryAmount.ZERO_ARS;
         }
-        BigDecimal unitPrice = getPrice() != null ? getPrice() : UNIT_CASH_PRICE;
-        BigDecimal total = unitPrice.multiply(BigDecimal.valueOf(getSize()))
-                .setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+        MonetaryAmount unitPrice = getPrice() != null ? getPrice() : UNIT_CASH_PRICE;
+        MonetaryAmount total = unitPrice.multiply(getSize());
         return getSide() == OrderSide.CASH_IN ? total : total.negate();
     }
 
