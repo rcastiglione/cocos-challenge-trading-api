@@ -35,10 +35,10 @@ cocos-challenge-trading-api/
 └── cocos-trading-service/                   # Submódulo 2: Core Trading Engine Service
     └── src/
         ├── main/java/com/cocos/trading/
-        │   ├── domain/                      # Modelos de dominio puros (Order, TradeOrder, TransferOrder) y excepciones
-        │   ├── application/                 # Inbound/Outbound Ports (incl. IdempotencyRepositoryPort), Use Cases y Execution Strategies
+        │   ├── domain/                      # Value Objects (MonetaryAmount), Read-Models (Portfolio, AssetPosition), Enums y Excepciones
+        │   ├── application/                 # Inbound/Outbound Ports, Use Cases, AccountLedgerCalculator y Execution Strategies
         │   ├── controller/                  # REST Controllers, Spring Validators (@InitBinder), ApiMapper & GlobalExceptionHandler
-        │   ├── repository/                  # JPA & Redis Adapters (RedisIdempotencyAdapter), JPA Entities & Specifications
+        │   ├── repository/                  # JPA & Redis Adapters, JPA Entities (@ManyToOne) y Spring Data Repositories (@EntityGraph)
         │   └── config/                      # Configuración de OpenAPI / Swagger
         ├── main/resources/
         │   ├── application.yml              # Configuración base agnóstica de entorno (default profile: local)
@@ -66,29 +66,30 @@ cocos-challenge-trading-api/
   - **Pros**:
     1. *Portabilidad Total Inter-Microservicios*: El artefacto `cocos-trading-contract.jar` puede ser consumido directamente por otros microservicios o equipos externos sin importar si utilizan **Spring Boot**, **Quarkus** o **Micronaut**.
     2. *Prevención de Breaking Changes & Tight Coupling*: Evita conflictos de versiones de librerías (*dependency hell*) y garantiza que la evolución interna del servicio no rompa el contrato público.
-    3. *Centralización de Reglas de Validación*: Al usar `OrderCreateRequestValidator` con `@InitBinder`, las validaciones complejas *cross-field* (como la exclusión mutua entre `size` y `amount`, o `price` obligatorio cuando `type == LIMIT`) viven en un único componente cohesivo y fácil de testear.
+    3. *Centralización de Reglas de Validación*: Al usar `OrderCreateRequestValidator` con `@InitBinder`, las validaciones complejas *cross-field* (como la exclusión mutua entre `quantity` y `amount`, o `price` obligatorio cuando `type == LIMIT`) viven en un único componente cohesivo y fácil de testear.
   - **Contras**:
     1. *Mayor Verbosidad en la Capa Web del Servicio*: Las anotaciones de ruteo HTTP (`@RequestMapping`, `@PostMapping`, `@GetMapping`) deben declararse explícitamente en las clases `*Controller` del módulo `cocos-trading-service` en lugar de heredarse de la interfaz.
 
 ---
 
-### 3.2. Polimorfismo en el Dominio vs. Unified Ledger en Persistencia (`TradeOrder` vs `TransferOrder`)
+### 3.2. Arquitectura Pragmática Data-Centric con Herencia `SINGLE_TABLE` en JPA (`OrderJpaEntity` -> `TradeOrderJpaEntity` | `TransferOrderJpaEntity`)
 - **Contexto & Problema**:
-  El esquema SQL provisto en el challenge define una única tabla `orders` que almacena tanto operaciones de mercado sobre activos financieros (`BUY` / `SELL` sobre instrumentos tipo `ACCIONES` con tipos `MARKET` / `LIMIT`) como movimientos de fondeo y retiro de dinero (`CASH_IN` / `CASH_OUT` sobre instrumentos tipo `MONEDA` a precio unitario fijo de `1.00` ARS). Modelar ambos conceptos en una única clase plana dentro del *Domain Layer* acopla reglas de negocio completamente distintas (validación de *buying power* vs tenencia de *shares*, precios de mercado/límite vs paridad `1:1` de `Cash`, o impacto en el cálculo de *Weighted Average Cost*).
+  El esquema SQL provisto en el challenge define una única tabla `orders` que almacena tanto operaciones de mercado sobre activos financieros (`BUY` / `SELL` sobre instrumentos tipo `ACCIONES`) como movimientos de efectivo (`CASH_IN` / `CASH_OUT` sobre instrumentos tipo `MONEDA`). Cuando se adopta un **Anemic Domain Model** donde toda la lógica de negocio vive en los Servicios y Estrategias, mantener dos jerarquías paralelas (clases de dominio anémicas vs. entidades JPA anémicas) junto con un `PersistenceMapper` intermedio genera *boilerplate* y complejidad accidental.
 - **Solución Arquitectónica**:
-  - **Persistencia (*Unified Ledger* en tabla `orders`)**: Se mantiene intacta la tabla única `orders` mapeada por `OrderJpaEntity`. Esto preserva la compatibilidad con el SQL inicial y permite consultar el libro mayor (*Account Ledger*) del usuario en una sola query indexada para calcular su `availableCash` y sus `positions`.
-  - **Dominio Desacoplado por Herencia (`Order` -> `TradeOrder` | `TransferOrder`)**: En la capa de dominio definimos la clase base abstracta `Order` y dos subclases concretas:
-    - `TradeOrder`: Encapsula exclusivamente operaciones de mercado (`BUY`/`SELL`, `MARKET`/`LIMIT`) sobre `Equity` (`ACCIONES`), validando sus propios invariantes de `side` y calculando su impacto en caja y posiciones.
-    - `TransferOrder`: Encapsula movimientos de dinero (`CASH_IN`/`CASH_OUT`) sobre `Cash` (`MONEDA`), asegurando precio unitario `1.00` ARS e invariantes de transferencia.
-  - **Discriminador en `PersistenceMapper`**: El componente `PersistenceMapper` actúa como *Discriminator / Anti-Corruption Layer* al traducir `OrderJpaEntity` hacia el dominio inspeccionando el campo `side`: si es una operación de `Cash` (`CASH_IN`/`CASH_OUT`) instancia un `TransferOrder`; si es una operación de mercado (`BUY`/`SELL`) instancia un `TradeOrder`.
+  - **Herencia Polimórfica en JPA (`SINGLE_TABLE` + `@DiscriminatorFormula`) sobre un Modelo Anémico Unificado**:
+    - Eliminamos las clases espejo redundantes y `PersistenceMapper`, modelando la jerarquía polimórfica directamente en JPA mediante `public abstract class OrderJpaEntity` (`@Inheritance(strategy = InheritanceType.SINGLE_TABLE)`) y sus dos subclases concretas:
+      - `TradeOrderJpaEntity` (`@DiscriminatorValue("TRADE")`): Operaciones de mercado (`BUY`, `SELL`) sobre `ACCIONES`.
+      - `TransferOrderJpaEntity` (`@DiscriminatorValue("TRANSFER")`): Movimientos de efectivo (`CASH_IN`, `CASH_OUT`) sobre `MONEDA`.
+    - **Discriminación sin Mutar el Esquema SQL (`@DiscriminatorFormula`)**: Dado que no podemos alterar la tabla `orders` en NeonDB para agregar una columna `dtype`, utilizamos `@DiscriminatorFormula("CASE WHEN side IN ('CASH_IN', 'CASH_OUT') THEN 'TRANSFER' ELSE 'TRADE' END")` de Hibernate. Esto evalúa el discriminador dinámicamente sobre la columna `side` existente al hacer `SELECT` sin interferir con los `INSERT`/`UPDATE`.
+    - **Asociaciones `@ManyToOne` y `@EntityGraph`**: `OrderJpaEntity` mapea `user` (`UserJpaEntity`) e `instrument` (`InstrumentJpaEntity`) mediante `@ManyToOne(fetch = FetchType.LAZY, optional = false)` y `@JoinColumn(name = "userid" / "instrumentid")`, hidratados en un único `JOIN` SQL vía `@EntityGraph(attributePaths = {"user", "instrument"})` en `SpringDataOrderRepository`.
+    - **Centralización Total de Comportamiento en Servicios**: Todos los cálculos contables y de dimensionamiento viven en `AccountLedgerCalculator` utilizando *Pattern Matching for `switch`* de Java 21 sobre `TradeOrderJpaEntity` y `TransferOrderJpaEntity`, mientras que `PortfolioService`, `OrderService` y `OrderExecutionStrategy` orquestan el negocio y `ApiMapper` traduce directamente hacia el contrato público.
 - **Pros & Contras (*Trade-offs*)**:
   - **Pros**:
-    1. *Separation of Concerns & Rich Domain Model*: Aísla las reglas de negocio de un *trade* bursátil (`TradeOrder`) de una simple transferencia monetaria (`TransferOrder`), permitiendo polimorfismo limpio (ej. `order.getCashImpact()`, `order.cancel()` y filtrado por tipo `instanceof TradeOrder` al valuar el *Portfolio*).
-    2. *Performance en Lectura (Unified Ledger)*: Evita `JOIN`s o `UNION`s costosos entre múltiples tablas al reconstruir el *Portfolio* y el saldo disponible (`availableCash`) a partir de las órdenes `FILLED`.
-    3. *Zero Schema Migration*: Respeta 100% el modelo relacional provisto por el challenge sin requerir columnas discriminadoras adicionales ni migraciones DDL.
+    1. *Polimorfismo de Tipos sin Duplicación de Clases*: Combina la expresividad de `TradeOrderJpaEntity` y `TransferOrderJpaEntity` (permitiendo *Pattern Matching* e `instanceof` seguros) con la simplicidad de una única jerarquía de entidades persistentes sin `PersistenceMapper`.
+    2. *Grafo de Objetos Completo sin N+1 Queries*: Gracias a `@ManyToOne` + `@EntityGraph` en `SpringDataOrderRepository`, al recuperar las órdenes de un usuario se obtienen simultáneamente sus entidades `UserJpaEntity` e `InstrumentJpaEntity` en un único `JOIN` SQL.
+    3. *Zero Schema Migration*: Respeta 100% el modelo relacional fijo provisto por el challenge (las columnas físicas en PostgreSQL siguen siendo `userid`, `instrumentid` y `side`, sin requerir una columna `dtype`).
   - **Contras**:
-    1. *Responsabilidad de Discriminación en el Mapper*: El `PersistenceMapper` debe discriminar explícitamente el subtipo en base al campo `side` en lugar de delegarlo a estrategias automáticas de herencia JPA (`@Inheritance` / `@DiscriminatorColumn`).
-    2. *Semántica Compartida a Nivel Físico*: En la base de datos, la columna `size` representa cantidad de acciones para `TradeOrder` y unidades de moneda (ARS) para `TransferOrder`, diferencia que queda encapsulada y saneada al cruzar hacia el dominio.
+    1. *Uso de Anotación Específica de Hibernate (`@DiscriminatorFormula`)*: Acopla la resolución del discriminador al proveedor ORM Hibernate (estándar por defecto en Spring Data JPA) para evitar agregar una columna discriminadora física en la base de datos del evaluador.
 
 ---
 
@@ -99,15 +100,15 @@ cocos-challenge-trading-api/
 
 ---
 
-### 3.4. Dimensionamiento de Órdenes (`size` vs `amount`), Persistencia de `REJECTED` y Validación de `CASH_OUT`
-- **Cálculo de `size` sin Fracciones**: El cliente puede enviar la cantidad exacta de acciones (`size`) o el monto total en ARS a invertir (`amount`). Cuando se envía `amount`, el motor calcula `size = floor(amount / executionPrice)` mediante `BigDecimal.divideToIntegralValue`, garantizando cero fracciones de acción (*fractional shares*) y sin exceder jamás el capital solicitado.
-- **Trazabilidad de Órdenes `REJECTED` (`BUY` / `SELL`)**: Si un usuario no posee suficiente `availableCash` para un `BUY`, no posee suficientes acciones (`availableShares < size`) para un `SELL`, o envía un `amount` inferior al precio de 1 acción (`size == 0`), la orden de mercado **se persiste** en la tabla `orders` con estado `REJECTED` para auditoría y se retorna en el *response*.
+### 3.4. Dimensionamiento de Órdenes (`quantity` vs `amount`), Persistencia de `REJECTED` y Validación de `CASH_OUT`
+- **Cálculo de `quantity` sin Fracciones**: El cliente puede enviar la cantidad exacta de acciones (`quantity`) o el monto total en ARS a invertir (`amount`). Cuando se envía `amount`, el motor calcula `quantity = floor(amount / executionPrice)` mediante `BigDecimal.divideToIntegralValue`, garantizando cero fracciones de acción (*fractional shares*) y sin exceder jamás el capital solicitado.
+- **Trazabilidad de Órdenes `REJECTED` (`BUY` / `SELL`)**: Si un usuario no posee suficiente `availableCash` para un `BUY`, no posee suficientes acciones (`availableShares < quantity`) para un `SELL`, o envía un `amount` inferior al precio de 1 acción (`quantity == 0`), la orden de mercado **se persiste** en la tabla `orders` con estado `REJECTED` para auditoría y se retorna en el *response*.
 - **Protección de Retiros (`CASH_OUT`)**: Si un usuario solicita una transferencia saliente (`CASH_OUT`) por un monto superior a su `availableCash`, el dominio rechaza la operación inmediatamente mediante `BusinessRuleViolationException` (`BusinessRuleViolationProblem` HTTP `409 Conflict`) sin persistir el retiro inválido.
 
 ---
 
 ### 3.5. Valuación del Portfolio & Cálculo de Rendimientos (`WAC`)
-- **Available Cash (`availableCash`)**: Derivado dinámicamente del *Unified Ledger* sumando el `getCashImpact()` de todas las órdenes `FILLED` (`+CASH_IN`, `-CASH_OUT`, `-BUY (size * price)`, `+SELL (size * price)`).
+- **Available Cash (`availableCash`)**: Derivado dinámicamente del *Unified Ledger* sumando el `calculateCashImpact()` de todas las órdenes `FILLED` (`+CASH_IN`, `-CASH_OUT`, `-BUY (quantity * price)`, `+SELL (quantity * price)`).
 - **Total Return (%) mediante *Weighted Average Cost (WAC)***:
   La decisión de utilizar **WAC (Precio Promedio Ponderado de Compra)** para determinar el `averageCost` de cada posición no es arbitraria; responde al estándar de la industria financiera (*financial market standard*) para calcular el *cost basis* real de una posición construida a través de múltiples órdenes `FILLED` ejecutadas a distintos precios a lo largo del tiempo:
   $$\text{Total Return (\%)} = \left(\frac{\text{lastPrice} - \text{averageCost}}{\text{averageCost}}\right) \times 100$$
@@ -145,15 +146,16 @@ cocos-challenge-trading-api/
 - **Contexto & Problemas (*Scalar Money Anti-Pattern, Primitive Obsession & Flat Payloads*)**:
   1. **En el Contrato HTTP**: Representar importes monetarios (`totalAccountValue`, `availableCash`, `marketValue`, `lastPrice`, `price`, `amount`) como números escalares planos (`BigDecimal`) en una API Fintech es un *anti-pattern* que introduce ambigüedad de divisa y riesgo de *currency mismatch* cuando la plataforma evoluciona hacia operatoria bimonetaria o multimoneda (`ARS`, `USD` MEP, `USD` CCL).
   2. **En el Dominio (*Primitive Obsession*)**: Manipular `BigDecimal` sueltos en `Order`, `Portfolio` y `AssetPosition` dispersa las reglas de escala (`scale = 2`, `RoundingMode.HALF_UP`) y carece de control de divisa en sumas o comparaciones.
-  3. **Cohesión del Payload JSON**: Exponer `userId` y `accountNumber` sueltos en la raíz del Portfolio, o mezclar `instrumentId`, `ticker` y `name` al mismo nivel que métricas dinámicas (`quantity`, `marketValue`, `totalReturnPercentage`) en cada posición, degrada la semántica REST.
+  3. **Cohesión y Simetría del Payload JSON**: Exponer `userId` y `accountNumber` sueltos en la raíz del Portfolio, mezclar `instrumentId`, `ticker` y `name` al mismo nivel que métricas dinámicas en cada posición, o retornar `userId` e `instrumentId` planos en las respuestas de órdenes (`POST /orders`), rompe la simetría del contrato y degrada la semántica REST.
 - **Solución Arquitectónica (Tactical DDD & API Design)**:
   - **Money Pattern End-to-End (`MonetaryAmount`)**:
     - En `cocos-trading-contract`, todos los importes y precios se transportan mediante el objeto compuesto `MonetaryAmount(BigDecimal amount, String currency)` (`{ "amount": 925.85, "currency": "ARS" }`), validado explícitamente en `OrderCreateRequestValidator`.
     - En `cocos-trading-service`, el *Value Object* de dominio `MonetaryAmount` encapsula la normalización de escala (`2` decimales `HALF_UP`) y toda la aritmética financiera segura (*currency-safe arithmetic*: `add`, `subtract`, `multiply`, `negate`, `divideToIntegralShares`, `isLessThan`), verificando `assertSameCurrency` antes de cada operación.
-  - **Agrupamiento Semántico de Entidades (`user` e `instrument`)**:
-    - En `Portfolio` / `PortfolioApi`, la identidad del titular se agrupa bajo `"user": { "id", "accountNumber" }` (`User` en el dominio y `UserSummaryApi` en el contrato).
-    - En `AssetPosition` / `AssetPositionApi`, la identidad del activo (`id`, `ticker`) se agrupa bajo `"instrument": { "id", "ticker" }` (`Instrument` en el dominio e `InstrumentSummaryApi` en el contrato, omitiendo `name` para mantener el *payload* compacto), mejorando sustancialmente la **cohesión semántica del contrato y la Developer Experience (DX)** para consumidores frontend y móviles.
-  - **Preservación del Esquema SQL vía Anti-Corruption Layer (`PersistenceMapper`)**: Siguiendo la regla del challenge (*"Los precios de los activos tienen que estar en pesos"*), `PersistenceMapper` envuelve automáticamente los valores numéricos en `MonetaryAmount.ars(...)` al leer de PostgreSQL y los desencapsula al persistir (`INSERT`/`UPDATE`), manteniendo **100% intacto el esquema de base de datos original del evaluador**.
+  - **Agrupamiento Semántico de Entidades, Vocabulario Unificado (`quantity`) y Simetría Estricta de Contrato (`PortfolioApi` & `OrderApi`)**:
+    - Se impuso **simetría estricta en toda la superficie de la API** reutilizando los mismos *Summary DTOs* (`UserSummaryApi` para `"user": { "id", "accountNumber" }` e `InstrumentSummaryApi` para `"instrument": { "id", "ticker" }`) y el mismo vocabulario de unidades (`quantity`) tanto en la consulta de portafolio (`GET /portfolios/{userId}`) como en las peticiones y respuestas de órdenes (`POST /orders` para `MARKET`, `LIMIT`, `CASH_IN`, `CASH_OUT` y `POST /orders/{orderId}/cancel`).
+    - En `OrderJpaEntity`, el atributo `private Integer quantity` se mapea explícitamente con `@Column(name = "size", nullable = false)` para unificar el lenguaje ubicuo en Java y en el JSON sin alterar la columna física `size` de la tabla `orders`.
+    - Al asociar `OrderJpaEntity` directamente con `UserJpaEntity` e `InstrumentJpaEntity` (hidratadas en memoria durante `OrderService.placeOrder` o vía `@ManyToOne` + `@EntityGraph` en `SpringDataOrderRepository`), `ApiMapper.toApi(OrderJpaEntity)` construye los resúmenes anidados con **cero overhead de I/O adicional** hacia PostgreSQL, elevando la **Developer Experience (DX)** para consumidores frontend y móviles.
+  - **Preservación del Esquema SQL**: Siguiendo la regla del challenge (*"Los precios de los activos tienen que estar en pesos"*), las entidades JPA persisten los importes escalares en las columnas `NUMERIC` originales mientras los servicios y `ApiMapper` operan y exponen `MonetaryAmount`, manteniendo **100% intacto el esquema de base de datos original del evaluador**.
 
 ---
 
@@ -333,7 +335,7 @@ curl --location 'http://localhost:8080/instruments?ticker=MOLI&name=Molinos'
 ### 3. Enviar una Orden al Mercado (`POST /orders`)
 > **Nota de Idempotencia**: Todos los *requests* a `POST /orders` requieren el *header* obligatorio `Idempotency-Key` con un `UUID` único por operación (almacenado en Redis con un TTL de 24 horas). Enviar dos veces el mismo `Idempotency-Key` retorna `409 Conflict` (`Duplicate Order`).
 
-#### A. Orden `MARKET` de Compra (`BUY`) por Cantidad Exacta de Acciones (`size`)
+#### A. Orden `MARKET` de Compra (`BUY`) por Cantidad Exacta de Acciones (`quantity`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
 --header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440001' \
@@ -343,8 +345,31 @@ curl --location 'http://localhost:8080/orders' \
     "instrumentId": 47,
     "side": "BUY",
     "type": "MARKET",
-    "size": 10
+    "quantity": 10
 }'
+```
+Ejemplo de respuesta (`201 Created`):
+```json
+{
+  "id": 12,
+  "user": {
+    "id": 1,
+    "accountNumber": "10001"
+  },
+  "instrument": {
+    "id": 47,
+    "ticker": "PAMP"
+  },
+  "quantity": 10,
+  "price": {
+    "amount": 925.85,
+    "currency": "ARS"
+  },
+  "type": "MARKET",
+  "side": "BUY",
+  "status": "FILLED",
+  "datetime": "2024-06-15T14:30:00"
+}
 ```
 
 #### B. Orden `MARKET` de Compra (`BUY`) por Monto Total en ARS (`amount` como `MonetaryAmount`)
@@ -374,7 +399,7 @@ curl --location 'http://localhost:8080/orders' \
     "instrumentId": 47,
     "side": "BUY",
     "type": "LIMIT",
-    "size": 5,
+    "quantity": 5,
     "price": {
         "amount": 900.00,
         "currency": "ARS"
@@ -392,8 +417,31 @@ curl --location 'http://localhost:8080/orders' \
     "instrumentId": 66,
     "side": "CASH_IN",
     "type": "MARKET",
-    "size": 50000
+    "quantity": 50000
 }'
+```
+Ejemplo de respuesta (`201 Created`):
+```json
+{
+  "id": 15,
+  "user": {
+    "id": 1,
+    "accountNumber": "10001"
+  },
+  "instrument": {
+    "id": 66,
+    "ticker": "ARS"
+  },
+  "quantity": 50000,
+  "price": {
+    "amount": 1.00,
+    "currency": "ARS"
+  },
+  "type": "MARKET",
+  "side": "CASH_IN",
+  "status": "FILLED",
+  "datetime": "2024-06-15T14:35:00"
+}
 ```
 
 #### E. Transferencia Saliente / Retiro de Dinero (`CASH_OUT` sobre `MONEDA`)
@@ -407,7 +455,7 @@ curl --location 'http://localhost:8080/orders' \
     "instrumentId": 66,
     "side": "CASH_OUT",
     "type": "MARKET",
-    "size": 20000
+    "quantity": 20000
 }'
 ```
 

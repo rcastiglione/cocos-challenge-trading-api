@@ -2,6 +2,7 @@ package com.cocos.trading.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -24,6 +25,8 @@ import com.cocos.trading.repository.RedisIdempotencyAdapter;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.entity.MarketDataJpaEntity;
 import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import com.cocos.trading.repository.entity.UserJpaEntity;
 import com.cocos.trading.repository.jpa.SpringDataInstrumentRepository;
 import com.cocos.trading.repository.jpa.SpringDataMarketDataRepository;
@@ -111,10 +114,10 @@ class OrderControllerIT extends TradingApplicationIT {
         ));
 
         // Seed 50,000 ARS available cash via a FILLED CASH_IN order
-        orderRepository.save(new OrderJpaEntity(
+        orderRepository.save(new TransferOrderJpaEntity(
                 null,
-                arsInstrument.getId(),
-                savedUser.getId(),
+                arsInstrument,
+                savedUser,
                 50_000,
                 new BigDecimal("1.00"),
                 OrderType.MARKET,
@@ -142,17 +145,24 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.userId").value(savedUser.getId()))
-                .andExpect(jsonPath("$.instrumentId").value(pampInstrument.getId()))
+                .andExpect(jsonPath("$.user.id").value(savedUser.getId()))
+                .andExpect(jsonPath("$.user.accountNumber").value("10001"))
+                .andExpect(jsonPath("$.instrument.id").value(pampInstrument.getId()))
+                .andExpect(jsonPath("$.instrument.ticker").value("PAMP"))
                 .andExpect(jsonPath("$.side").value("BUY"))
                 .andExpect(jsonPath("$.type").value("MARKET"))
-                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.quantity").value(10))
                 .andExpect(jsonPath("$.price.amount").value(925.85))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("FILLED"));
 
-        List<OrderJpaEntity> persistedOrders = orderRepository.findAll();
+        List<OrderJpaEntity> persistedOrders = orderRepository.findByUserIdAndStatusOrderByDatetimeAscIdAsc(
+                savedUser.getId(),
+                OrderStatus.FILLED
+        );
         assertEquals(2, persistedOrders.size());
+        assertInstanceOf(TransferOrderJpaEntity.class, persistedOrders.get(0));
+        assertInstanceOf(TradeOrderJpaEntity.class, persistedOrders.get(1));
     }
 
     @Test
@@ -174,7 +184,7 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.quantity").value(10))
                 .andExpect(jsonPath("$.price.amount").value(925.85))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("FILLED"));
@@ -199,7 +209,7 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.size").value(100))
+                .andExpect(jsonPath("$.quantity").value(100))
                 .andExpect(jsonPath("$.price.amount").value(925.85))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("REJECTED"));
@@ -209,7 +219,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 OrderStatus.REJECTED
         );
         assertEquals(1, rejectedOrders.size());
-        assertEquals(100, rejectedOrders.getFirst().getSize());
+        assertEquals(100, rejectedOrders.getFirst().getQuantity());
     }
 
     @Test
@@ -231,7 +241,7 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.size").value(5))
+                .andExpect(jsonPath("$.quantity").value(5))
                 .andExpect(jsonPath("$.status").value("REJECTED"));
     }
 
@@ -253,6 +263,10 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(limitRequest)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.user.id").value(savedUser.getId()))
+                .andExpect(jsonPath("$.user.accountNumber").value("10001"))
+                .andExpect(jsonPath("$.instrument.id").value(pampInstrument.getId()))
+                .andExpect(jsonPath("$.instrument.ticker").value("PAMP"))
                 .andExpect(jsonPath("$.status").value("NEW"))
                 .andExpect(jsonPath("$.price.amount").value(900.00))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
@@ -265,6 +279,10 @@ class OrderControllerIT extends TradingApplicationIT {
         mockMvc.perform(post("/orders/{orderId}/cancel", createdOrderId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(createdOrderId))
+                .andExpect(jsonPath("$.user.id").value(savedUser.getId()))
+                .andExpect(jsonPath("$.user.accountNumber").value("10001"))
+                .andExpect(jsonPath("$.instrument.id").value(pampInstrument.getId()))
+                .andExpect(jsonPath("$.instrument.ticker").value("PAMP"))
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
     }
 
@@ -351,8 +369,12 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validCashOut)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.user.id").value(savedUser.getId()))
+                .andExpect(jsonPath("$.user.accountNumber").value("10001"))
+                .andExpect(jsonPath("$.instrument.id").value(arsInstrument.getId()))
+                .andExpect(jsonPath("$.instrument.ticker").value("ARS"))
                 .andExpect(jsonPath("$.side").value("CASH_OUT"))
-                .andExpect(jsonPath("$.size").value(20000))
+                .andExpect(jsonPath("$.quantity").value(20000))
                 .andExpect(jsonPath("$.price.amount").value(1.00))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.status").value("FILLED"));

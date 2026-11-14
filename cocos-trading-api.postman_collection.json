@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Cocos Capital Trading Engine API",
-    "description": "Postman Collection for the Cocos Challenge Transactional Trading Engine API (Portfolio Valuation with Money Pattern & Semantic Entity Grouping, Instrument Search, and Idempotent MARKET/LIMIT Order Routing).",
+    "description": "Postman Collection for the Cocos Challenge Transactional Trading Engine API (Portfolio Valuation & Order Routing with Money Pattern, Semantic Entity Grouping for user & instrument, and Idempotent MARKET/LIMIT Order Execution).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -107,15 +107,52 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"size\": 10\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Places a MARKET BUY order for an exact number of shares using the latest close price. Transitions immediately to FILLED (or REJECTED if insufficient funds) and returns price as MonetaryAmount."
-      }
+        "description": "Places a MARKET BUY order for an exact number of shares using the latest close price. Transitions immediately to FILLED (or REJECTED if insufficient funds) and returns nested user ({id, accountNumber}), instrument ({id, ticker}), and price as MonetaryAmount."
+      },
+      "response": [
+        {
+          "name": "201 Created — MARKET BUY Order (By Exact Share Quantity)",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "550e8400-e29b-41d4-a716-446655440001"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id\": 12,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00\"\n}"
+        }
+      ]
     },
     {
       "name": "5. Submit MARKET BUY Order (By Total ARS Investment Amount)",
@@ -141,8 +178,45 @@
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Places a MARKET BUY order by total ARS MonetaryAmount, automatically calculating the maximum whole shares (floor(amount / closePrice))."
-      }
+        "description": "Places a MARKET BUY order by total ARS MonetaryAmount, automatically calculating the maximum whole shares (floor(amount / closePrice)) and returning nested user and instrument summary objects."
+      },
+      "response": [
+        {
+          "name": "201 Created — MARKET BUY Order (By Total ARS Investment Amount)",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "550e8400-e29b-41d4-a716-446655440002"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"amount\": {\n    \"amount\": 15000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id\": 13,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 16,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:00\"\n}"
+        }
+      ]
     },
     {
       "name": "6. Submit LIMIT BUY Order",
@@ -161,15 +235,52 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"size\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  }\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  }\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Places a LIMIT BUY order with a target MonetaryAmount price ({amount, currency: 'ARS'}). Stored in status NEW if funds are sufficient."
-      }
+        "description": "Places a LIMIT BUY order with a target MonetaryAmount price ({amount, currency: 'ARS'}). Stored in status NEW if funds are sufficient and returns nested user and instrument summary objects."
+      },
+      "response": [
+        {
+          "name": "201 Created — LIMIT BUY Order (Status NEW)",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "550e8400-e29b-41d4-a716-446655440003"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id\": 105,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"NEW\",\n  \"datetime\": \"2024-06-15T14:32:00\"\n}"
+        }
+      ]
     },
     {
       "name": "7. Cancel Pending (NEW) Order",
@@ -181,8 +292,32 @@
           "host": ["{{baseUrl}}"],
           "path": ["orders", "105", "cancel"]
         },
-        "description": "Cancels an order currently in NEW status, transitioning it to CANCELLED."
-      }
+        "description": "Cancels an order currently in NEW status, transitioning it to CANCELLED and returning the updated OrderApi with nested user and instrument objects."
+      },
+      "response": [
+        {
+          "name": "200 OK — Order Cancelled",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/105/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "105", "cancel"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id\": 105,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2024-06-15T14:32:00\"\n}"
+        }
+      ]
     },
     {
       "name": "8. Submit CASH_IN Transfer",
@@ -201,15 +336,52 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_IN\",\n  \"type\": \"MARKET\",\n  \"size\": 50000\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_IN\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Deposits ARS into the user's account using the MONEDA instrument."
-      }
+        "description": "Deposits ARS into the user's account using the MONEDA instrument and returns nested user ({id, accountNumber}) and instrument ({id: 66, ticker: 'ARS'}) summary objects."
+      },
+      "response": [
+        {
+          "name": "201 Created — CASH_IN Transfer",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "550e8400-e29b-41d4-a716-446655440004"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_IN\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id\": 15,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 66,\n    \"ticker\": \"ARS\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 1.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"CASH_IN\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:35:00\"\n}"
+        }
+      ]
     },
     {
       "name": "9. Submit CASH_OUT Transfer",
@@ -228,15 +400,52 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_OUT\",\n  \"type\": \"MARKET\",\n  \"size\": 20000\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_OUT\",\n  \"type\": \"MARKET\",\n  \"quantity\": 20000\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Withdraws ARS from the user's account using the MONEDA instrument (validates that requested amount does not exceed availableCash)."
-      }
+        "description": "Withdraws ARS from the user's account using the MONEDA instrument (validates that requested amount does not exceed availableCash) and returns nested user ({id, accountNumber}) and instrument ({id: 66, ticker: 'ARS'}) summary objects."
+      },
+      "response": [
+        {
+          "name": "201 Created — CASH_OUT Transfer",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "550e8400-e29b-41d4-a716-446655440005"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_OUT\",\n  \"type\": \"MARKET\",\n  \"quantity\": 20000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id\": 16,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 66,\n    \"ticker\": \"ARS\"\n  },\n  \"quantity\": 20000,\n  \"price\": {\n    \"amount\": 1.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"CASH_OUT\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:36:00\"\n}"
+        }
+      ]
     },
     {
       "name": "Fail: Duplicate Order (Idempotency test)",
@@ -255,7 +464,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"size\": 10\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",

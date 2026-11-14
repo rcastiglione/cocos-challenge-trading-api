@@ -2,11 +2,9 @@ package com.cocos.trading.repository;
 
 import com.cocos.trading.application.port.in.model.InstrumentSearchQuery;
 import com.cocos.trading.application.port.out.InstrumentRepositoryPort;
-import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.jpa.InstrumentSpecifications;
 import com.cocos.trading.repository.jpa.SpringDataInstrumentRepository;
-import com.cocos.trading.repository.mapper.PersistenceMapper;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -26,27 +24,22 @@ public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
     private final SpringDataInstrumentRepository springDataInstrumentRepository;
 
     @Override
-    public Optional<Instrument> findById(Long id) {
-        return springDataInstrumentRepository.findById(id)
-                .map(PersistenceMapper::toDomain);
+    public Optional<InstrumentJpaEntity> findById(Long id) {
+        return springDataInstrumentRepository.findById(id);
     }
 
     @Override
-    public List<Instrument> findAllByIds(Collection<Long> ids) {
+    public List<InstrumentJpaEntity> findAllByIds(Collection<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
-        return springDataInstrumentRepository.findAllById(ids).stream()
-                .map(PersistenceMapper::toDomain)
-                .toList();
+        return springDataInstrumentRepository.findAllById(ids);
     }
 
     @Override
-    public List<Instrument> search(InstrumentSearchQuery query) {
+    public List<InstrumentJpaEntity> search(InstrumentSearchQuery query) {
         Specification<InstrumentJpaEntity> spec = InstrumentSpecifications.withFilters(query);
         Sort sort = Sort.by(Sort.Direction.ASC, "ticker");
-        return springDataInstrumentRepository.findAll(spec, sort).stream()
-                .map(PersistenceMapper::toDomain)
-                .toList();
+        return springDataInstrumentRepository.findAll(spec, sort);
     }
 }

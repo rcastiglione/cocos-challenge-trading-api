@@ -29,7 +29,7 @@ public interface OrderContractApi {
     @Operation(
             summary = "Submit an equity order (BUY/SELL) or cash transfer (CASH_IN/CASH_OUT)",
             description = "Places a MARKET or LIMIT equity order (BUY, SELL) or a cash transfer (CASH_IN, CASH_OUT on MONEDA instruments) "
-                    + "by exact quantity (size) or total ARS amount (amount). Requires a mandatory UUID 'Idempotency-Key' HTTP header "
+                    + "by exact quantity (quantity) or total ARS amount (amount). Requires a mandatory UUID 'Idempotency-Key' HTTP header "
                     + "(stored in Redis with a 24-hour TTL) to guarantee idempotency and prevent double-spending on network retries. "
                     + "Equity orders with insufficient funds/holdings result in a persisted REJECTED order, while duplicate idempotency keys "
                     + "or CASH_OUT transfers exceeding availableCash are rejected with a 409 BusinessRuleViolationProblem."

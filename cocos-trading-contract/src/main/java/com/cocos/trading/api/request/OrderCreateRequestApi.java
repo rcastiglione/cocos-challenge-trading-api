@@ -8,14 +8,14 @@ import lombok.Builder;
 
 /**
  * Request payload for submitting a new order to the market.
- * Supports sizing either by exact share quantity ({@code size}) or by total ARS investment ({@code amount}).
+ * Supports sizing either by exact share quantity ({@code quantity}) or by total ARS investment ({@code amount}).
  * Must be accompanied by a mandatory {@code Idempotency-Key} (UUID) HTTP header on {@code POST /orders}.
  *
  * @param userId       The unique identifier of the user placing the order.
  * @param instrumentId The unique identifier of the target financial instrument.
  * @param side         The order side (BUY, SELL, CASH_IN, CASH_OUT).
  * @param type         The order execution type (MARKET, LIMIT).
- * @param size         Optional exact number of shares/units to trade (mutually exclusive or prioritized with amount).
+ * @param quantity     Optional exact number of shares/units to trade (mutually exclusive with amount).
  * @param amount       Optional total investment amount in ARS (used to calculate maximum whole shares).
  * @param price        Target execution price in ARS (required for LIMIT orders; ignored for MARKET orders).
  */
@@ -35,7 +35,7 @@ public record OrderCreateRequestApi(
         OrderTypeApi type,
 
         @Schema(description = "Exact quantity of shares (or ARS units for MONEDA) to trade", example = "10")
-        Integer size,
+        Integer quantity,
 
         @Schema(description = "Total investment amount in ARS (automatically calculates maximum whole shares)")
         MonetaryAmount amount,

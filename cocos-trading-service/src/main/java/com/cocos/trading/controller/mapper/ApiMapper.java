@@ -15,20 +15,20 @@ import com.cocos.trading.api.response.UserSummaryApi;
 import com.cocos.trading.application.port.in.model.InstrumentSearchQuery;
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
 import com.cocos.trading.domain.model.AssetPosition;
-import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentQuote;
 import com.cocos.trading.domain.model.MonetaryAmount;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderType;
 import com.cocos.trading.domain.model.Portfolio;
-import com.cocos.trading.domain.model.User;
+import com.cocos.trading.repository.entity.InstrumentJpaEntity;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.UserJpaEntity;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Utility mapper converting between API contract DTOs (`*Api`) and application/domain models.
+ * Utility mapper converting between API contract DTOs (`*Api`), application commands/models, and JPA entities.
  */
 public final class ApiMapper {
 
@@ -69,7 +69,7 @@ public final class ApiMapper {
                 .instrumentId(request.instrumentId())
                 .side(OrderSide.valueOf(request.side().name()))
                 .type(OrderType.valueOf(request.type().name()))
-                .size(request.size())
+                .quantity(request.quantity())
                 .amount(toDomainMonetaryAmount(request.amount()))
                 .price(toDomainMonetaryAmount(request.price()))
                 .build();
@@ -86,10 +86,10 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a domain {@link Portfolio} to a {@link PortfolioApi}, grouping user metadata under {@code user}
+     * Converts a {@link Portfolio} to a {@link PortfolioApi}, grouping user metadata under {@code user}
      * and instrument metadata under each position's {@code instrument}.
      *
-     * @param portfolio The domain portfolio.
+     * @param portfolio The portfolio valuation read-model.
      * @return The {@link PortfolioApi} response DTO.
      */
     public static PortfolioApi toApi(Portfolio portfolio) {
@@ -97,16 +97,8 @@ public final class ApiMapper {
                 .map(ApiMapper::toApi)
                 .toList();
 
-        User user = portfolio.user();
-        UserSummaryApi userSummary = user != null
-                ? UserSummaryApi.builder()
-                        .id(user.id())
-                        .accountNumber(user.accountNumber())
-                        .build()
-                : null;
-
         return PortfolioApi.builder()
-                .user(userSummary)
+                .user(toUserSummaryApi(portfolio.user()))
                 .totalAccountValue(toContractMonetaryAmount(portfolio.totalAccountValue()))
                 .availableCash(toContractMonetaryAmount(portfolio.availableCash()))
                 .positions(positions)
@@ -114,22 +106,14 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a domain {@link AssetPosition} to an {@link AssetPositionApi}.
+     * Converts an {@link AssetPosition} to an {@link AssetPositionApi}.
      *
-     * @param position The domain asset position.
+     * @param position The asset position read-model.
      * @return The {@link AssetPositionApi} response DTO.
      */
     public static AssetPositionApi toApi(AssetPosition position) {
-        Instrument instrument = position.instrument();
-        InstrumentSummaryApi instrumentSummary = instrument != null
-                ? InstrumentSummaryApi.builder()
-                        .id(instrument.id())
-                        .ticker(instrument.ticker())
-                        .build()
-                : null;
-
         return AssetPositionApi.builder()
-                .instrument(instrumentSummary)
+                .instrument(toInstrumentSummaryApi(position.instrument()))
                 .quantity(position.quantity())
                 .lastPrice(toContractMonetaryAmount(position.lastPrice()))
                 .marketValue(toContractMonetaryAmount(position.marketValue()))
@@ -139,17 +123,17 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a domain {@link InstrumentQuote} to an {@link InstrumentApi}.
+     * Converts an {@link InstrumentQuote} to an {@link InstrumentApi}.
      *
-     * @param quote The domain instrument quote.
+     * @param quote The instrument quote projection.
      * @return The {@link InstrumentApi} response DTO.
      */
     public static InstrumentApi toApi(InstrumentQuote quote) {
         return InstrumentApi.builder()
-                .id(quote.instrument().id())
-                .ticker(quote.instrument().ticker())
-                .name(quote.instrument().name())
-                .type(InstrumentTypeApi.valueOf(quote.instrument().type().name()))
+                .id(quote.instrument().getId())
+                .ticker(quote.instrument().getTicker())
+                .name(quote.instrument().getName())
+                .type(InstrumentTypeApi.valueOf(quote.instrument().getType().name()))
                 .lastPrice(toContractMonetaryAmount(quote.lastPrice()))
                 .previousClose(toContractMonetaryAmount(quote.previousClose()))
                 .dailyReturnPercentage(quote.dailyReturnPercentage())
@@ -157,22 +141,45 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a domain {@link Order} to an {@link OrderApi}.
+     * Converts an {@link OrderJpaEntity} directly to an {@link OrderApi}, populating the nested {@link UserSummaryApi}
+     * and {@link InstrumentSummaryApi} objects for semantic symmetry with {@link PortfolioApi}.
      *
-     * @param order The domain order.
+     * @param order The persisted {@link OrderJpaEntity}.
      * @return The {@link OrderApi} response DTO.
      */
-    public static OrderApi toApi(Order order) {
+    public static OrderApi toApi(OrderJpaEntity order) {
         return OrderApi.builder()
                 .id(order.getId())
-                .instrumentId(order.getInstrumentId())
-                .userId(order.getUserId())
-                .size(order.getSize())
-                .price(toContractMonetaryAmount(order.getPrice()))
+                .user(toUserSummaryApi(order.getUser()))
+                .instrument(toInstrumentSummaryApi(order.getInstrument()))
+                .quantity(order.getQuantity())
+                .price(order.getPrice() != null
+                        ? com.cocos.trading.api.common.MonetaryAmount.ars(order.getPrice())
+                        : null)
                 .type(OrderTypeApi.valueOf(order.getType().name()))
                 .side(OrderSideApi.valueOf(order.getSide().name()))
                 .status(OrderStatusApi.valueOf(order.getStatus().name()))
                 .datetime(order.getDatetime() != null ? order.getDatetime().format(ISO_DATETIME_FORMATTER) : null)
+                .build();
+    }
+
+    private static UserSummaryApi toUserSummaryApi(UserJpaEntity user) {
+        if (user == null) {
+            return null;
+        }
+        return UserSummaryApi.builder()
+                .id(user.getId())
+                .accountNumber(user.getAccountNumber())
+                .build();
+    }
+
+    private static InstrumentSummaryApi toInstrumentSummaryApi(InstrumentJpaEntity instrument) {
+        if (instrument == null) {
+            return null;
+        }
+        return InstrumentSummaryApi.builder()
+                .id(instrument.getId())
+                .ticker(instrument.getTicker())
                 .build();
     }
 

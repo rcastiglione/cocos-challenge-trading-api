@@ -1,7 +1,7 @@
 package com.cocos.trading.application.port.in;
 
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
-import com.cocos.trading.domain.model.Order;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
 
 /**
  * Inbound port (use case) for placing a new market or limit order.
@@ -13,8 +13,7 @@ public interface PlaceOrderUseCase {
      * and persisting the resulting order (FILLED, NEW, or REJECTED).
      *
      * @param command The order placement command.
-     * @return The persisted {@link Order}.
+     * @return The persisted {@link OrderJpaEntity}.
      */
-    Order placeOrder(PlaceOrderCommand command);
+    OrderJpaEntity placeOrder(PlaceOrderCommand command);
 }
-

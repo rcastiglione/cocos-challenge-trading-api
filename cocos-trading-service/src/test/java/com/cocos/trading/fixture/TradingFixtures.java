@@ -1,16 +1,17 @@
 package com.cocos.trading.fixture;
 
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
-import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentType;
-import com.cocos.trading.domain.model.MarketData;
 import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
-import com.cocos.trading.domain.model.TradeOrder;
-import com.cocos.trading.domain.model.TransferOrder;
-import com.cocos.trading.domain.model.User;
+import com.cocos.trading.repository.entity.InstrumentJpaEntity;
+import com.cocos.trading.repository.entity.MarketDataJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
+import com.cocos.trading.repository.entity.UserJpaEntity;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -28,16 +29,16 @@ public final class TradingFixtures {
     private TradingFixtures() {
     }
 
-    public static User defaultUser() {
-        return User.builder()
+    public static UserJpaEntity defaultUser() {
+        return UserJpaEntity.builder()
                 .id(DEFAULT_USER_ID)
                 .email("emiliano@test.com")
                 .accountNumber("10001")
                 .build();
     }
 
-    public static Instrument arsInstrument() {
-        return Instrument.builder()
+    public static InstrumentJpaEntity arsInstrument() {
+        return InstrumentJpaEntity.builder()
                 .id(ARS_INSTRUMENT_ID)
                 .ticker("ARS")
                 .name("PESOS")
@@ -45,8 +46,8 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static Instrument pampInstrument() {
-        return Instrument.builder()
+    public static InstrumentJpaEntity pampInstrument() {
+        return InstrumentJpaEntity.builder()
                 .id(PAMP_INSTRUMENT_ID)
                 .ticker("PAMP")
                 .name("Pampa Energía S.A.")
@@ -54,8 +55,8 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static Instrument metrInstrument() {
-        return Instrument.builder()
+    public static InstrumentJpaEntity metrInstrument() {
+        return InstrumentJpaEntity.builder()
                 .id(METR_INSTRUMENT_ID)
                 .ticker("METR")
                 .name("MetroGAS S.A.")
@@ -63,39 +64,49 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static MarketData pampMarketData() {
-        return MarketData.builder()
+    public static InstrumentJpaEntity instrumentForId(Long instrumentId) {
+        if (ARS_INSTRUMENT_ID.equals(instrumentId)) {
+            return arsInstrument();
+        }
+        if (METR_INSTRUMENT_ID.equals(instrumentId)) {
+            return metrInstrument();
+        }
+        return pampInstrument();
+    }
+
+    public static MarketDataJpaEntity pampMarketData() {
+        return MarketDataJpaEntity.builder()
                 .id(100L)
                 .instrumentId(PAMP_INSTRUMENT_ID)
-                .high(MonetaryAmount.ars("950.00"))
-                .low(MonetaryAmount.ars("900.00"))
-                .open(MonetaryAmount.ars("910.00"))
-                .close(MonetaryAmount.ars("925.85"))
-                .previousClose(MonetaryAmount.ars("906.35"))
+                .high(new BigDecimal("950.00"))
+                .low(new BigDecimal("900.00"))
+                .open(new BigDecimal("910.00"))
+                .close(new BigDecimal("925.85"))
+                .previousClose(new BigDecimal("906.35"))
                 .date(LocalDate.of(2024, 7, 15))
                 .build();
     }
 
-    public static MarketData metrMarketData() {
-        return MarketData.builder()
+    public static MarketDataJpaEntity metrMarketData() {
+        return MarketDataJpaEntity.builder()
                 .id(101L)
                 .instrumentId(METR_INSTRUMENT_ID)
-                .high(MonetaryAmount.ars("260.00"))
-                .low(MonetaryAmount.ars("240.00"))
-                .open(MonetaryAmount.ars("245.00"))
-                .close(MonetaryAmount.ars("250.00"))
-                .previousClose(MonetaryAmount.ars("250.00"))
+                .high(new BigDecimal("260.00"))
+                .low(new BigDecimal("240.00"))
+                .open(new BigDecimal("245.00"))
+                .close(new BigDecimal("250.00"))
+                .previousClose(new BigDecimal("250.00"))
                 .date(LocalDate.of(2024, 7, 15))
                 .build();
     }
 
-    public static TransferOrder cashInOrder(Long id, int amount) {
-        return TransferOrder.builder()
+    public static TransferOrderJpaEntity cashInOrder(Long id, int amount) {
+        return TransferOrderJpaEntity.builder()
                 .id(id)
-                .instrumentId(ARS_INSTRUMENT_ID)
-                .userId(DEFAULT_USER_ID)
-                .size(amount)
-                .price(MonetaryAmount.ONE_ARS)
+                .user(defaultUser())
+                .instrument(arsInstrument())
+                .quantity(amount)
+                .price(new BigDecimal("1.00"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_IN)
                 .status(OrderStatus.FILLED)
@@ -103,13 +114,13 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static TransferOrder cashOutOrder(Long id, int amount) {
-        return TransferOrder.builder()
+    public static TransferOrderJpaEntity cashOutOrder(Long id, int amount) {
+        return TransferOrderJpaEntity.builder()
                 .id(id)
-                .instrumentId(ARS_INSTRUMENT_ID)
-                .userId(DEFAULT_USER_ID)
-                .size(amount)
-                .price(MonetaryAmount.ONE_ARS)
+                .user(defaultUser())
+                .instrument(arsInstrument())
+                .quantity(amount)
+                .price(new BigDecimal("1.00"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_OUT)
                 .status(OrderStatus.FILLED)
@@ -117,13 +128,13 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static TradeOrder filledBuyOrder(Long id, Long instrumentId, int size, String price) {
-        return TradeOrder.builder()
+    public static TradeOrderJpaEntity filledBuyOrder(Long id, Long instrumentId, int quantity, String price) {
+        return TradeOrderJpaEntity.builder()
                 .id(id)
-                .instrumentId(instrumentId)
-                .userId(DEFAULT_USER_ID)
-                .size(size)
-                .price(MonetaryAmount.ars(price))
+                .user(defaultUser())
+                .instrument(instrumentForId(instrumentId))
+                .quantity(quantity)
+                .price(new BigDecimal(price))
                 .type(OrderType.MARKET)
                 .side(OrderSide.BUY)
                 .status(OrderStatus.FILLED)
@@ -131,13 +142,13 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static TradeOrder filledSellOrder(Long id, Long instrumentId, int size, String price) {
-        return TradeOrder.builder()
+    public static TradeOrderJpaEntity filledSellOrder(Long id, Long instrumentId, int quantity, String price) {
+        return TradeOrderJpaEntity.builder()
                 .id(id)
-                .instrumentId(instrumentId)
-                .userId(DEFAULT_USER_ID)
-                .size(size)
-                .price(MonetaryAmount.ars(price))
+                .user(defaultUser())
+                .instrument(instrumentForId(instrumentId))
+                .quantity(quantity)
+                .price(new BigDecimal(price))
                 .type(OrderType.MARKET)
                 .side(OrderSide.SELL)
                 .status(OrderStatus.FILLED)
@@ -145,14 +156,14 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static PlaceOrderCommand marketBuyBySize(int size) {
+    public static PlaceOrderCommand marketBuyByQuantity(int quantity) {
         return PlaceOrderCommand.builder()
                 .idempotencyKey(UUID.randomUUID())
                 .userId(DEFAULT_USER_ID)
                 .instrumentId(PAMP_INSTRUMENT_ID)
                 .side(OrderSide.BUY)
                 .type(OrderType.MARKET)
-                .size(size)
+                .quantity(quantity)
                 .build();
     }
 

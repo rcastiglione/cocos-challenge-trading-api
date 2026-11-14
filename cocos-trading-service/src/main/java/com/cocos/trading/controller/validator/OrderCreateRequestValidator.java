@@ -58,31 +58,31 @@ public class OrderCreateRequestValidator implements Validator {
                 "type is required."
         );
 
-        boolean hasSize = request.size() != null;
+        boolean hasQuantity = request.quantity() != null;
         boolean hasAmount = request.amount() != null;
 
-        if (!hasSize && !hasAmount) {
+        if (!hasQuantity && !hasAmount) {
             errors.rejectValue(
-                    "size",
-                    "sizeOrAmount.required",
-                    "Either size (exact shares) or amount (total investment in ARS) must be provided."
+                    "quantity",
+                    "quantityOrAmount.required",
+                    "Either quantity (exact shares) or amount (total investment in ARS) must be provided."
             );
         }
 
-        if (hasSize && hasAmount) {
+        if (hasQuantity && hasAmount) {
             errors.rejectValue(
-                    "size",
-                    "sizeOrAmount.ambiguous",
-                    "Provide either size or amount, not both."
+                    "quantity",
+                    "quantityOrAmount.ambiguous",
+                    "Provide either quantity or amount, not both."
             );
         }
 
         ValidatorUtils.validatePositiveInteger(
                 errors,
-                request.size(),
-                "size",
-                "size.invalid",
-                "size must be greater than 0."
+                request.quantity(),
+                "quantity",
+                "quantity.invalid",
+                "quantity must be greater than 0."
         );
 
         ValidatorUtils.validateMonetaryAmount(

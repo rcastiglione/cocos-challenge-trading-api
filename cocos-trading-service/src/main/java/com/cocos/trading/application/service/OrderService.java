@@ -14,11 +14,13 @@ import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.exception.DuplicateOrderException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
-import com.cocos.trading.domain.model.Instrument;
-import com.cocos.trading.domain.model.MarketData;
+import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.MonetaryAmount;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderStatus;
+import com.cocos.trading.repository.entity.InstrumentJpaEntity;
+import com.cocos.trading.repository.entity.MarketDataJpaEntity;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.UserJpaEntity;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.util.List;
@@ -32,8 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Application service implementing {@link PlaceOrderUseCase} and {@link CancelOrderUseCase}.
  * Orchestrates order routing via polymorphic {@link OrderExecutionStrategy} implementations,
- * enforces distributed idempotency locking via {@link IdempotencyRepositoryPort},
- * and delegates telemetry recording to {@link TradingMetricsService}.
+ * manages order state transitions (such as cancellation), enforces distributed idempotency locking
+ * via {@link IdempotencyRepositoryPort}, and delegates telemetry recording to {@link TradingMetricsService}.
  */
 @Slf4j
 @Service
@@ -59,7 +61,7 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
 
     @Override
     @Transactional
-    public Order placeOrder(PlaceOrderCommand command) {
+    public OrderJpaEntity placeOrder(PlaceOrderCommand command) {
         UUID idempotencyKey = command.idempotencyKey();
         if (idempotencyKey != null) {
             boolean acquired = idempotencyRepositoryPort.tryAcquire(idempotencyKey, IDEMPOTENCY_TTL);
@@ -79,26 +81,27 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         }
     }
 
-    private Order executePlaceOrder(PlaceOrderCommand command) {
+    private OrderJpaEntity executePlaceOrder(PlaceOrderCommand command) {
         Timer.Sample executionSample = tradingMetricsService.startOrderTimer();
         log.info("[order] Placing order from command={}", command);
 
-        userRepositoryPort.findById(command.userId())
+        UserJpaEntity user = userRepositoryPort.findById(command.userId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", command.userId()));
 
-        Instrument instrument = instrumentRepositoryPort.findById(command.instrumentId())
+        InstrumentJpaEntity instrument = instrumentRepositoryPort.findById(command.instrumentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Instrument", command.instrumentId()));
 
-        Optional<MarketData> latestMarketData = instrument.isCurrency()
+        Optional<MarketDataJpaEntity> latestMarketData = instrument.getType() == InstrumentType.MONEDA
                 ? Optional.empty()
-                : marketDataRepositoryPort.findLatestByInstrumentId(instrument.id());
+                : marketDataRepositoryPort.findLatestByInstrumentId(instrument.getId());
 
-        List<Order> filledOrders = orderRepositoryPort.findByUserIdAndStatus(command.userId(), OrderStatus.FILLED);
+        List<OrderJpaEntity> filledOrders = orderRepositoryPort.findByUserIdAndStatus(command.userId(), OrderStatus.FILLED);
         MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
-        int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledOrders, instrument.id());
+        int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledOrders, instrument.getId());
 
         OrderExecutionContext context = new OrderExecutionContext(
                 command,
+                user,
                 instrument,
                 latestMarketData,
                 availableCash,
@@ -112,8 +115,8 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
                         String.format("No execution strategy found for order type=%s, side=%s", command.type(), command.side())
                 ));
 
-        Order evaluatedOrder = strategy.execute(context);
-        Order savedOrder = orderRepositoryPort.save(evaluatedOrder);
+        OrderJpaEntity evaluatedOrder = strategy.execute(context);
+        OrderJpaEntity savedOrder = orderRepositoryPort.save(evaluatedOrder);
 
         String status = savedOrder.getStatus().name();
         String type = savedOrder.getType().name();
@@ -121,17 +124,17 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         tradingMetricsService.recordOrderProcessed(status, type, side);
         tradingMetricsService.stopOrderTimer(executionSample, status, type, side);
 
-        log.info("[order] Order processed and persisted: id={}, status={}, size={}, price={}, idempotencyKey={}",
-                savedOrder.getId(), savedOrder.getStatus(), savedOrder.getSize(), savedOrder.getPrice(), command.idempotencyKey());
+        log.info("[order] Order processed and persisted: id={}, status={}, quantity={}, price={}, idempotencyKey={}",
+                savedOrder.getId(), savedOrder.getStatus(), savedOrder.getQuantity(), savedOrder.getPrice(), command.idempotencyKey());
         return savedOrder;
     }
 
     @Override
     @Transactional
-    public Order cancelOrder(Long orderId) {
+    public OrderJpaEntity cancelOrder(Long orderId) {
         log.info("[order] Cancelling orderId={}", orderId);
 
-        Order existingOrder = orderRepositoryPort.findById(orderId)
+        OrderJpaEntity existingOrder = orderRepositoryPort.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
 
         if (existingOrder.getStatus() != OrderStatus.NEW) {
@@ -142,8 +145,8 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
             );
         }
 
-        Order cancelledOrder = existingOrder.cancel();
-        Order savedOrder = orderRepositoryPort.save(cancelledOrder);
+        existingOrder.setStatus(OrderStatus.CANCELLED);
+        OrderJpaEntity savedOrder = orderRepositoryPort.save(existingOrder);
 
         tradingMetricsService.recordOrderProcessed(
                 savedOrder.getStatus().name(),

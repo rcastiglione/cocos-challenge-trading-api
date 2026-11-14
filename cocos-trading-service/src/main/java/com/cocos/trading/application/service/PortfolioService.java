@@ -1,22 +1,21 @@
 package com.cocos.trading.application.service;
 
 import com.cocos.trading.application.port.in.GetPortfolioUseCase;
-import com.cocos.trading.application.port.out.InstrumentRepositoryPort;
 import com.cocos.trading.application.port.out.MarketDataRepositoryPort;
 import com.cocos.trading.application.port.out.OrderRepositoryPort;
 import com.cocos.trading.application.port.out.UserRepositoryPort;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.cocos.trading.domain.model.AssetPosition;
-import com.cocos.trading.domain.model.Instrument;
 import com.cocos.trading.domain.model.InstrumentType;
-import com.cocos.trading.domain.model.MarketData;
 import com.cocos.trading.domain.model.MonetaryAmount;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.Portfolio;
-import com.cocos.trading.domain.model.TradeOrder;
-import com.cocos.trading.domain.model.User;
+import com.cocos.trading.repository.entity.InstrumentJpaEntity;
+import com.cocos.trading.repository.entity.MarketDataJpaEntity;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.UserJpaEntity;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -24,8 +23,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,46 +47,40 @@ public class PortfolioService implements GetPortfolioUseCase {
 
     private final UserRepositoryPort userRepositoryPort;
     private final OrderRepositoryPort orderRepositoryPort;
-    private final InstrumentRepositoryPort instrumentRepositoryPort;
     private final MarketDataRepositoryPort marketDataRepositoryPort;
 
     @Override
     @Transactional(readOnly = true)
     public Portfolio getPortfolio(Long userId) {
         log.info("[portfolio] Calculating portfolio for userId={}", userId);
-        User user = userRepositoryPort.findById(userId)
+        UserJpaEntity user = userRepositoryPort.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
-        List<Order> filledOrders = orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED);
+        List<OrderJpaEntity> filledOrders = orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED);
         MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
 
-        Set<Long> tradedInstrumentIds = filledOrders.stream()
-                .map(Order::getInstrumentId)
+        Set<Long> equityInstrumentIds = filledOrders.stream()
+                .map(OrderJpaEntity::getInstrument)
+                .filter(Objects::nonNull)
+                .filter(inst -> inst.getType() == InstrumentType.ACCIONES)
+                .map(InstrumentJpaEntity::getId)
                 .collect(Collectors.toSet());
 
-        Map<Long, Instrument> instrumentsById = instrumentRepositoryPort.findAllByIds(tradedInstrumentIds).stream()
-                .collect(Collectors.toMap(Instrument::id, Function.identity()));
-
-        Set<Long> equityInstrumentIds = instrumentsById.values().stream()
-                .filter(inst -> inst.type() == InstrumentType.ACCIONES)
-                .map(Instrument::id)
-                .collect(Collectors.toSet());
-
-        Map<Long, MarketData> latestMarketDataById =
+        Map<Long, MarketDataJpaEntity> latestMarketDataById =
                 marketDataRepositoryPort.findLatestByInstrumentIds(equityInstrumentIds);
 
         Map<Long, PositionAccumulator> accumulators = new LinkedHashMap<>();
-        for (Order order : filledOrders) {
-            if (!(order instanceof TradeOrder tradeOrder)) {
+        for (OrderJpaEntity order : filledOrders) {
+            if (!(order instanceof TradeOrderJpaEntity tradeOrder)) {
                 continue;
             }
-            Instrument instrument = instrumentsById.get(tradeOrder.getInstrumentId());
-            if (instrument == null || instrument.isCurrency()) {
+            InstrumentJpaEntity instrument = tradeOrder.getInstrument();
+            if (instrument == null || instrument.getType() == InstrumentType.MONEDA) {
                 continue;
             }
             PositionAccumulator acc = accumulators.computeIfAbsent(
-                    instrument.id(),
-                    id -> new PositionAccumulator()
+                    instrument.getId(),
+                    id -> new PositionAccumulator(instrument)
             );
             acc.apply(tradeOrder);
         }
@@ -102,19 +95,17 @@ public class PortfolioService implements GetPortfolioUseCase {
                 continue;
             }
 
-            Instrument instrument = instrumentsById.get(instrumentId);
-            MarketData marketData = latestMarketDataById.get(instrumentId);
+            InstrumentJpaEntity instrument = acc.instrument;
+            MarketDataJpaEntity marketData = latestMarketDataById.get(instrumentId);
 
-            MonetaryAmount lastPrice = (marketData != null && marketData.close() != null)
-                    ? marketData.close()
+            MonetaryAmount lastPrice = (marketData != null && marketData.getClose() != null)
+                    ? MonetaryAmount.ars(marketData.getClose())
                     : MonetaryAmount.ars(acc.averageCost);
 
             MonetaryAmount marketValue = lastPrice.multiply(acc.quantity);
 
             BigDecimal totalReturnPercentage = calculateTotalReturnPercentage(lastPrice.amount(), acc.averageCost);
-            BigDecimal dailyReturnPercentage = marketData != null
-                    ? marketData.calculateDailyReturnPercentage()
-                    : BigDecimal.ZERO.setScale(CURRENCY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal dailyReturnPercentage = AccountLedgerCalculator.calculateDailyReturnPercentage(marketData);
 
             positions.add(AssetPosition.builder()
                     .instrument(instrument)
@@ -128,7 +119,7 @@ public class PortfolioService implements GetPortfolioUseCase {
             totalPositionsValue = totalPositionsValue.add(marketValue);
         }
 
-        positions.sort(Comparator.comparing(pos -> pos.instrument().ticker()));
+        positions.sort(Comparator.comparing(pos -> pos.instrument().getTicker()));
 
         MonetaryAmount totalAccountValue = availableCash.add(totalPositionsValue);
 
@@ -154,21 +145,26 @@ public class PortfolioService implements GetPortfolioUseCase {
      * Stateful accumulator computing net share quantity and weighted average purchase price (WAC).
      */
     private static final class PositionAccumulator {
+        private final InstrumentJpaEntity instrument;
         private int quantity = 0;
         private BigDecimal totalCostBasis = BigDecimal.ZERO;
         private BigDecimal averageCost = BigDecimal.ZERO;
 
-        void apply(TradeOrder order) {
-            if (order.getSize() == null || order.getSize() <= 0 || order.getPrice() == null) {
+        private PositionAccumulator(InstrumentJpaEntity instrument) {
+            this.instrument = instrument;
+        }
+
+        void apply(TradeOrderJpaEntity order) {
+            if (order.getQuantity() == null || order.getQuantity() <= 0 || order.getPrice() == null) {
                 return;
             }
             if (order.getSide() == OrderSide.BUY) {
-                BigDecimal orderCost = order.getPrice().amount().multiply(BigDecimal.valueOf(order.getSize()));
+                BigDecimal orderCost = order.getPrice().multiply(BigDecimal.valueOf(order.getQuantity()));
                 totalCostBasis = totalCostBasis.add(orderCost);
-                quantity += order.getSize();
+                quantity += order.getQuantity();
                 averageCost = totalCostBasis.divide(BigDecimal.valueOf(quantity), CALCULATION_SCALE, RoundingMode.HALF_UP);
             } else if (order.getSide() == OrderSide.SELL) {
-                quantity -= order.getSize();
+                quantity -= order.getQuantity();
                 if (quantity <= 0) {
                     quantity = 0;
                     totalCostBasis = BigDecimal.ZERO;

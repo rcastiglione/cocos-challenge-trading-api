@@ -1,12 +1,15 @@
 package com.cocos.trading.application.strategy;
 
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
+import com.cocos.trading.application.service.AccountLedgerCalculator;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.MonetaryAmount;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
-import com.cocos.trading.domain.model.TransferOrder;
+import com.cocos.trading.domain.model.OrderType;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 
@@ -23,24 +26,29 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
     }
 
     @Override
-    public Order execute(OrderExecutionContext context) {
+    public OrderJpaEntity execute(OrderExecutionContext context) {
         PlaceOrderCommand command = context.command();
-        if (!context.instrument().isCurrency()) {
+        if (command.side() == null || !command.side().isCashOperation()) {
+            throw new BusinessRuleViolationException(
+                    "CashTransferExecutionStrategy requires a cash movement side (CASH_IN or CASH_OUT), but received: " + command.side()
+            );
+        }
+        if (context.instrument().getType() != InstrumentType.MONEDA) {
             throw new BusinessRuleViolationException(
                     "CASH_IN and CASH_OUT orders can only be placed on MONEDA instruments."
             );
         }
 
-        int resolvedSize = resolveCashUnits(command);
-        validateCashWithdrawal(context, resolvedSize);
-        OrderStatus status = resolvedSize > 0 ? OrderStatus.FILLED : OrderStatus.REJECTED;
+        int resolvedQuantity = resolveCashUnits(command);
+        validateCashWithdrawal(context, resolvedQuantity);
+        OrderStatus status = resolvedQuantity > 0 ? OrderStatus.FILLED : OrderStatus.REJECTED;
 
-        return TransferOrder.builder()
-                .instrumentId(command.instrumentId())
-                .userId(command.userId())
-                .size(resolvedSize)
-                .price(TransferOrder.UNIT_CASH_PRICE)
-                .type(command.type())
+        return TransferOrderJpaEntity.builder()
+                .user(context.user())
+                .instrument(context.instrument())
+                .quantity(resolvedQuantity)
+                .price(AccountLedgerCalculator.UNIT_CASH_PRICE.amount())
+                .type(command.type() != null ? command.type() : OrderType.MARKET)
                 .side(command.side())
                 .status(status)
                 .datetime(LocalDateTime.now())
@@ -48,21 +56,21 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
     }
 
     private int resolveCashUnits(PlaceOrderCommand command) {
-        if (command.size() != null && command.size() > 0) {
-            return command.size();
+        if (command.quantity() != null && command.quantity() > 0) {
+            return command.quantity();
         }
         if (command.amount() != null && command.amount().isPositive()) {
-            return Order.calculateMaxShareSize(command.amount(), TransferOrder.UNIT_CASH_PRICE);
+            return AccountLedgerCalculator.calculateMaxShareQuantity(command.amount(), AccountLedgerCalculator.UNIT_CASH_PRICE);
         }
         return 0;
     }
 
-    private void validateCashWithdrawal(OrderExecutionContext context, int resolvedSize) {
+    private void validateCashWithdrawal(OrderExecutionContext context, int resolvedQuantity) {
         PlaceOrderCommand command = context.command();
         if (command.side() == OrderSide.CASH_OUT) {
             MonetaryAmount withdrawalAmount = command.amount() != null && command.amount().isPositive()
                     ? command.amount()
-                    : TransferOrder.UNIT_CASH_PRICE.multiply(resolvedSize);
+                    : AccountLedgerCalculator.UNIT_CASH_PRICE.multiply(resolvedQuantity);
             if (context.availableCash().isLessThan(withdrawalAmount)) {
                 throw new BusinessRuleViolationException(
                         String.format(

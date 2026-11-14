@@ -14,7 +14,7 @@ import lombok.Builder;
  * @param instrumentId   ID of the target instrument.
  * @param side           Order side ({@link OrderSide#BUY}, {@link OrderSide#SELL}, {@link OrderSide#CASH_IN}, {@link OrderSide#CASH_OUT}).
  * @param type           Order execution type ({@link OrderType#MARKET} or {@link OrderType#LIMIT}).
- * @param size           Optional exact quantity of shares/units.
+ * @param quantity       Optional exact quantity of shares/units.
  * @param amount         Optional total investment amount in ARS as a {@link MonetaryAmount}.
  * @param price          Optional target price in ARS as a {@link MonetaryAmount} (required for {@link OrderType#LIMIT}).
  */
@@ -25,7 +25,7 @@ public record PlaceOrderCommand(
         Long instrumentId,
         OrderSide side,
         OrderType type,
-        Integer size,
+        Integer quantity,
         MonetaryAmount amount,
         MonetaryAmount price
 ) {

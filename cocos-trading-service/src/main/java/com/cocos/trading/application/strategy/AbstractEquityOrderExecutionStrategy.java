@@ -1,17 +1,19 @@
 package com.cocos.trading.application.strategy;
 
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
+import com.cocos.trading.application.service.AccountLedgerCalculator;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
+import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.MonetaryAmount;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
-import com.cocos.trading.domain.model.TradeOrder;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
 import java.time.LocalDateTime;
 
 /**
  * Abstract base class for equity ({@code ACCIONES}) order execution strategies,
- * providing shared share sizing and buying-power/holdings validation logic.
+ * providing shared share quantity calculation and buying-power/holdings validation logic.
  */
 public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecutionStrategy {
 
@@ -32,23 +34,28 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
     protected abstract OrderStatus getAcceptedStatus();
 
     @Override
-    public Order execute(OrderExecutionContext context) {
+    public OrderJpaEntity execute(OrderExecutionContext context) {
         PlaceOrderCommand command = context.command();
-        if (context.instrument().isCurrency()) {
+        if (command.side() == null || command.side().isCashOperation()) {
+            throw new BusinessRuleViolationException(
+                    "Equity order execution requires a market trade side (BUY or SELL), but received: " + command.side()
+            );
+        }
+        if (context.instrument().getType() == InstrumentType.MONEDA) {
             throw new BusinessRuleViolationException(
                     "BUY and SELL equity orders cannot be placed on MONEDA instruments. Use CASH_IN or CASH_OUT."
             );
         }
 
         MonetaryAmount executionPrice = resolveExecutionPrice(context);
-        int resolvedSize = resolveShareSize(command, executionPrice);
-        OrderStatus status = determineStatus(context, executionPrice, resolvedSize);
+        int resolvedQuantity = resolveShareQuantity(command, executionPrice);
+        OrderStatus status = determineStatus(context, executionPrice, resolvedQuantity);
 
-        return TradeOrder.builder()
-                .instrumentId(command.instrumentId())
-                .userId(command.userId())
-                .size(resolvedSize)
-                .price(executionPrice)
+        return TradeOrderJpaEntity.builder()
+                .user(context.user())
+                .instrument(context.instrument())
+                .quantity(resolvedQuantity)
+                .price(executionPrice.amount())
                 .type(command.type())
                 .side(command.side())
                 .status(status)
@@ -56,12 +63,12 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
                 .build();
     }
 
-    private int resolveShareSize(PlaceOrderCommand command, MonetaryAmount executionPrice) {
-        if (command.size() != null && command.size() > 0) {
-            return command.size();
+    private int resolveShareQuantity(PlaceOrderCommand command, MonetaryAmount executionPrice) {
+        if (command.quantity() != null && command.quantity() > 0) {
+            return command.quantity();
         }
         if (command.amount() != null && command.amount().isPositive()) {
-            return Order.calculateMaxShareSize(command.amount(), executionPrice);
+            return AccountLedgerCalculator.calculateMaxShareQuantity(command.amount(), executionPrice);
         }
         return 0;
     }
@@ -69,21 +76,21 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
     private OrderStatus determineStatus(
             OrderExecutionContext context,
             MonetaryAmount executionPrice,
-            int resolvedSize
+            int resolvedQuantity
     ) {
-        if (resolvedSize <= 0) {
+        if (resolvedQuantity <= 0) {
             return OrderStatus.REJECTED;
         }
 
         OrderSide side = context.command().side();
         if (side == OrderSide.BUY) {
-            MonetaryAmount totalCost = executionPrice.multiply(resolvedSize);
+            MonetaryAmount totalCost = executionPrice.multiply(resolvedQuantity);
             if (context.availableCash().isLessThan(totalCost)) {
                 return OrderStatus.REJECTED;
             }
             return getAcceptedStatus();
         } else if (side == OrderSide.SELL) {
-            if (context.availableShares() < resolvedSize) {
+            if (context.availableShares() < resolvedQuantity) {
                 return OrderStatus.REJECTED;
             }
             return getAcceptedStatus();

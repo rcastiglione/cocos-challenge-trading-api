@@ -26,16 +26,17 @@ import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.exception.DuplicateOrderException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.model.MonetaryAmount;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
-import com.cocos.trading.domain.model.TradeOrder;
-import com.cocos.trading.domain.model.TransferOrder;
 import com.cocos.trading.fixture.TradingFixtures;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -103,9 +104,9 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("Should execute MARKET BUY order by exact size and persist as FILLED when cash is sufficient")
-    void shouldExecuteMarketBuyBySizeAsFilled() {
-        PlaceOrderCommand command = TradingFixtures.marketBuyBySize(10);
+    @DisplayName("Should execute MARKET BUY order by exact quantity and persist as FILLED when cash is sufficient")
+    void shouldExecuteMarketBuyByQuantityAsFilled() {
+        PlaceOrderCommand command = TradingFixtures.marketBuyByQuantity(10);
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
@@ -115,16 +116,22 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Order result = orderService.placeOrder(command);
+        OrderJpaEntity result = orderService.placeOrder(command);
 
-        assertInstanceOf(TradeOrder.class, result);
+        assertInstanceOf(TradeOrderJpaEntity.class, result);
         assertEquals(OrderStatus.FILLED, result.getStatus());
-        assertEquals(10, result.getSize());
-        assertEquals(MonetaryAmount.ars("925.85"), result.getPrice());
-        verify(orderRepositoryPort).save(any(Order.class));
+        assertEquals(10, result.getQuantity());
+        assertEquals(new BigDecimal("925.85"), result.getPrice());
+        assertNotNull(result.getUser());
+        assertEquals(TradingFixtures.DEFAULT_USER_ID, result.getUser().getId());
+        assertEquals("10001", result.getUser().getAccountNumber());
+        assertNotNull(result.getInstrument());
+        assertEquals(TradingFixtures.PAMP_INSTRUMENT_ID, result.getInstrument().getId());
+        assertEquals("PAMP", result.getInstrument().getTicker());
+        verify(orderRepositoryPort).save(any(OrderJpaEntity.class));
 
         Counter filledCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
                 .tags("status", "FILLED", "type", "MARKET", "side", "BUY")
@@ -140,8 +147,8 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("Should calculate whole share size from total ARS amount on MARKET BUY order")
-    void shouldCalculateShareSizeFromInvestmentAmount() {
+    @DisplayName("Should calculate whole share quantity from total ARS amount on MARKET BUY order")
+    void shouldCalculateShareQuantityFromInvestmentAmount() {
         // 10,000 ARS / 925.85 = 10 shares
         PlaceOrderCommand command = TradingFixtures.marketBuyByAmount("10000.00");
 
@@ -153,22 +160,22 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Order result = orderService.placeOrder(command);
+        OrderJpaEntity result = orderService.placeOrder(command);
 
-        assertInstanceOf(TradeOrder.class, result);
+        assertInstanceOf(TradeOrderJpaEntity.class, result);
         assertEquals(OrderStatus.FILLED, result.getStatus());
-        assertEquals(10, result.getSize());
-        assertEquals(MonetaryAmount.ars("925.85"), result.getPrice());
+        assertEquals(10, result.getQuantity());
+        assertEquals(new BigDecimal("925.85"), result.getPrice());
     }
 
     @Test
     @DisplayName("Should reject and persist as REJECTED when user has insufficient cash for BUY order")
     void shouldRejectOrderWhenInsufficientCash() {
         // 100 shares * 925.85 = 92,585.00 ARS > 10,000.00 ARS available
-        PlaceOrderCommand command = TradingFixtures.marketBuyBySize(100);
+        PlaceOrderCommand command = TradingFixtures.marketBuyByQuantity(100);
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
@@ -178,12 +185,12 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 10_000)));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Order result = orderService.placeOrder(command);
+        OrderJpaEntity result = orderService.placeOrder(command);
 
-        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        ArgumentCaptor<OrderJpaEntity> captor = ArgumentCaptor.forClass(OrderJpaEntity.class);
         verify(orderRepositoryPort).save(captor.capture());
         assertEquals(OrderStatus.REJECTED, result.getStatus());
         assertEquals(OrderStatus.REJECTED, captor.getValue().getStatus());
@@ -203,7 +210,7 @@ class OrderServiceTest {
                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                 .side(OrderSide.SELL)
                 .type(OrderType.MARKET)
-                .size(50)
+                .quantity(50)
                 .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
@@ -218,13 +225,13 @@ class OrderServiceTest {
                         TradingFixtures.cashInOrder(1L, 50_000),
                         TradingFixtures.filledBuyOrder(2L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "800.00")
                 ));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Order result = orderService.placeOrder(command);
+        OrderJpaEntity result = orderService.placeOrder(command);
 
         assertEquals(OrderStatus.REJECTED, result.getStatus());
-        assertEquals(50, result.getSize());
+        assertEquals(50, result.getQuantity());
     }
 
     @Test
@@ -235,7 +242,7 @@ class OrderServiceTest {
                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                 .side(OrderSide.BUY)
                 .type(OrderType.LIMIT)
-                .size(10)
+                .quantity(10)
                 .price(MonetaryAmount.ars("900.00"))
                 .build();
 
@@ -247,14 +254,14 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 20_000)));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Order result = orderService.placeOrder(command);
+        OrderJpaEntity result = orderService.placeOrder(command);
 
         assertEquals(OrderStatus.NEW, result.getStatus());
-        assertEquals(10, result.getSize());
-        assertEquals(MonetaryAmount.ars("900.00"), result.getPrice());
+        assertEquals(10, result.getQuantity());
+        assertEquals(new BigDecimal("900.00"), result.getPrice());
 
         Counter newCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
                 .tags("status", "NEW", "type", "LIMIT", "side", "BUY")
@@ -266,22 +273,26 @@ class OrderServiceTest {
     @Test
     @DisplayName("Should cancel order when status is NEW and reject cancellation when status is FILLED")
     void shouldOnlyCancelOrdersWithNewStatus() {
-        Order newOrder = TradeOrder.builder()
+        OrderJpaEntity newOrder = TradeOrderJpaEntity.builder()
                 .id(50L)
-                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
-                .userId(TradingFixtures.DEFAULT_USER_ID)
-                .size(10)
-                .price(MonetaryAmount.ars("900.00"))
+                .user(TradingFixtures.defaultUser())
+                .instrument(TradingFixtures.pampInstrument())
+                .quantity(10)
+                .price(new BigDecimal("900.00"))
                 .type(OrderType.LIMIT)
                 .side(OrderSide.BUY)
                 .status(OrderStatus.NEW)
                 .datetime(LocalDateTime.now())
                 .build();
         when(orderRepositoryPort.findById(50L)).thenReturn(Optional.of(newOrder));
-        when(orderRepositoryPort.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Order cancelled = orderService.cancelOrder(50L);
+        OrderJpaEntity cancelled = orderService.cancelOrder(50L);
         assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
+        assertNotNull(cancelled.getUser());
+        assertEquals("10001", cancelled.getUser().getAccountNumber());
+        assertNotNull(cancelled.getInstrument());
+        assertEquals("PAMP", cancelled.getInstrument().getTicker());
 
         Counter cancelledCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
                 .tags("status", "CANCELLED", "type", "LIMIT", "side", "BUY")
@@ -289,7 +300,7 @@ class OrderServiceTest {
         assertNotNull(cancelledCounter);
         assertEquals(1.0, cancelledCounter.count());
 
-        Order filledOrder = TradingFixtures.filledBuyOrder(51L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "900.00");
+        OrderJpaEntity filledOrder = TradingFixtures.filledBuyOrder(51L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "900.00");
         when(orderRepositoryPort.findById(51L)).thenReturn(Optional.of(filledOrder));
 
         assertThrows(InvalidOrderStateException.class, () -> orderService.cancelOrder(51L));
@@ -299,7 +310,7 @@ class OrderServiceTest {
     @DisplayName("Should isolate Timer.Sample per thread and record exact Counter and Timer totals under concurrent load")
     void shouldMaintainThreadSafetyUnderHighConcurrency() throws Exception {
         int concurrentRequests = 50;
-        PlaceOrderCommand command = TradingFixtures.marketBuyBySize(10);
+        PlaceOrderCommand command = TradingFixtures.marketBuyByQuantity(10);
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
@@ -309,7 +320,7 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         CountDownLatch readyLatch = new CountDownLatch(concurrentRequests);
@@ -317,7 +328,7 @@ class OrderServiceTest {
         ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
         try {
-            List<Future<Order>> futures = new ArrayList<>(concurrentRequests);
+            List<Future<OrderJpaEntity>> futures = new ArrayList<>(concurrentRequests);
             for (int i = 0; i < concurrentRequests; i++) {
                 futures.add(executor.submit(() -> {
                     readyLatch.countDown();
@@ -329,8 +340,8 @@ class OrderServiceTest {
             assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
             startGate.countDown();
 
-            for (Future<Order> future : futures) {
-                Order order = future.get(5, TimeUnit.SECONDS);
+            for (Future<OrderJpaEntity> future : futures) {
+                OrderJpaEntity order = future.get(5, TimeUnit.SECONDS);
                 assertEquals(OrderStatus.FILLED, order.getStatus());
             }
         } finally {
@@ -359,7 +370,7 @@ class OrderServiceTest {
                 .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
                 .side(OrderSide.CASH_OUT)
                 .type(OrderType.MARKET)
-                .size(20_000)
+                .quantity(20_000)
                 .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
@@ -368,17 +379,17 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Order result = orderService.placeOrder(command);
+        OrderJpaEntity result = orderService.placeOrder(command);
 
-        assertInstanceOf(TransferOrder.class, result);
+        assertInstanceOf(TransferOrderJpaEntity.class, result);
         assertEquals(OrderStatus.FILLED, result.getStatus());
         assertEquals(OrderSide.CASH_OUT, result.getSide());
-        assertEquals(20_000, result.getSize());
-        assertEquals(MonetaryAmount.ONE_ARS, result.getPrice());
-        assertEquals(MonetaryAmount.ars("-20000.00"), result.getCashImpact());
+        assertEquals(20_000, result.getQuantity());
+        assertEquals(new BigDecimal("1.00"), result.getPrice());
+        assertEquals(MonetaryAmount.ars("-20000.00"), AccountLedgerCalculator.calculateCashImpact(result));
 
         Counter cashOutCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
                 .tags("status", "FILLED", "type", "MARKET", "side", "CASH_OUT")
@@ -396,7 +407,7 @@ class OrderServiceTest {
                 .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
                 .side(OrderSide.CASH_OUT)
                 .type(OrderType.MARKET)
-                .size(60_000)
+                .quantity(60_000)
                 .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
@@ -424,7 +435,7 @@ class OrderServiceTest {
                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                 .side(OrderSide.BUY)
                 .type(OrderType.MARKET)
-                .size(10)
+                .quantity(10)
                 .build();
 
         when(idempotencyRepositoryPort.tryAcquire(duplicateKey, Duration.ofHours(24)))
@@ -451,7 +462,7 @@ class OrderServiceTest {
                 .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
                 .side(OrderSide.CASH_OUT)
                 .type(OrderType.MARKET)
-                .size(25_000)
+                .quantity(25_000)
                 .build();
 
         Set<UUID> lockedKeys = ConcurrentHashMap.newKeySet();
@@ -464,7 +475,7 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
-        when(orderRepositoryPort.save(any(Order.class)))
+        when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         CountDownLatch readyLatch = new CountDownLatch(concurrentAttempts);
@@ -475,7 +486,7 @@ class OrderServiceTest {
         AtomicInteger duplicateCount = new AtomicInteger(0);
 
         try {
-            List<Future<Order>> futures = new ArrayList<>(concurrentAttempts);
+            List<Future<OrderJpaEntity>> futures = new ArrayList<>(concurrentAttempts);
             for (int i = 0; i < concurrentAttempts; i++) {
                 futures.add(executor.submit(() -> {
                     readyLatch.countDown();
@@ -487,9 +498,9 @@ class OrderServiceTest {
             assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
             startGate.countDown();
 
-            for (Future<Order> future : futures) {
+            for (Future<OrderJpaEntity> future : futures) {
                 try {
-                    Order order = future.get(5, TimeUnit.SECONDS);
+                    OrderJpaEntity order = future.get(5, TimeUnit.SECONDS);
                     if (order.getStatus() == OrderStatus.FILLED) {
                         successCount.incrementAndGet();
                     }
@@ -507,6 +518,6 @@ class OrderServiceTest {
 
         assertEquals(1, successCount.get());
         assertEquals(concurrentAttempts - 1, duplicateCount.get());
-        verify(orderRepositoryPort, times(1)).save(any(Order.class));
+        verify(orderRepositoryPort, times(1)).save(any(OrderJpaEntity.class));
     }
 }

@@ -5,17 +5,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
-import com.cocos.trading.application.port.out.InstrumentRepositoryPort;
 import com.cocos.trading.application.port.out.MarketDataRepositoryPort;
 import com.cocos.trading.application.port.out.OrderRepositoryPort;
 import com.cocos.trading.application.port.out.UserRepositoryPort;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.cocos.trading.domain.model.AssetPosition;
 import com.cocos.trading.domain.model.MonetaryAmount;
-import com.cocos.trading.domain.model.Order;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.Portfolio;
 import com.cocos.trading.fixture.TradingFixtures;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -39,9 +38,6 @@ class PortfolioServiceTest {
     private OrderRepositoryPort orderRepositoryPort;
 
     @Mock
-    private InstrumentRepositoryPort instrumentRepositoryPort;
-
-    @Mock
     private MarketDataRepositoryPort marketDataRepositoryPort;
 
     @InjectMocks
@@ -61,7 +57,7 @@ class PortfolioServiceTest {
         // Total Return % = ((925.85 - 800.00) / 800.00) * 100 = 15.73%
         // Total Account Value = 838,000.00 + 74,068.00 = 912,068.00 ARS
         Long userId = TradingFixtures.DEFAULT_USER_ID;
-        List<Order> filledOrders = List.of(
+        List<OrderJpaEntity> filledOrders = List.of(
                 TradingFixtures.cashInOrder(1L, 1_000_000),
                 TradingFixtures.cashOutOrder(2L, 100_000),
                 TradingFixtures.filledBuyOrder(3L, TradingFixtures.PAMP_INSTRUMENT_ID, 100, "800.00"),
@@ -70,8 +66,6 @@ class PortfolioServiceTest {
 
         when(userRepositoryPort.findById(userId)).thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED)).thenReturn(filledOrders);
-        when(instrumentRepositoryPort.findAllByIds(Set.of(TradingFixtures.ARS_INSTRUMENT_ID, TradingFixtures.PAMP_INSTRUMENT_ID)))
-                .thenReturn(List.of(TradingFixtures.arsInstrument(), TradingFixtures.pampInstrument()));
         when(marketDataRepositoryPort.findLatestByInstrumentIds(Set.of(TradingFixtures.PAMP_INSTRUMENT_ID)))
                 .thenReturn(Map.of(TradingFixtures.PAMP_INSTRUMENT_ID, TradingFixtures.pampMarketData()));
 
@@ -79,14 +73,14 @@ class PortfolioServiceTest {
         Portfolio portfolio = portfolioService.getPortfolio(userId);
 
         // Then
-        assertEquals(userId, portfolio.user().id());
-        assertEquals("10001", portfolio.user().accountNumber());
+        assertEquals(userId, portfolio.user().getId());
+        assertEquals("10001", portfolio.user().getAccountNumber());
         assertEquals(MonetaryAmount.ars("838000.00"), portfolio.availableCash());
         assertEquals(MonetaryAmount.ars("912068.00"), portfolio.totalAccountValue());
         assertEquals(1, portfolio.positions().size());
 
         AssetPosition pampPosition = portfolio.positions().getFirst();
-        assertEquals("PAMP", pampPosition.instrument().ticker());
+        assertEquals("PAMP", pampPosition.instrument().getTicker());
         assertEquals(80, pampPosition.quantity());
         assertEquals(MonetaryAmount.ars("925.85"), pampPosition.lastPrice());
         assertEquals(MonetaryAmount.ars("74068.00"), pampPosition.marketValue());
@@ -98,7 +92,7 @@ class PortfolioServiceTest {
     @DisplayName("Should exclude closed positions where net share quantity is zero")
     void shouldExcludeClosedPositions() {
         Long userId = TradingFixtures.DEFAULT_USER_ID;
-        List<Order> filledOrders = List.of(
+        List<OrderJpaEntity> filledOrders = List.of(
                 TradingFixtures.cashInOrder(1L, 100_000),
                 TradingFixtures.filledBuyOrder(2L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "800.00"),
                 TradingFixtures.filledSellOrder(3L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "850.00")
@@ -106,8 +100,6 @@ class PortfolioServiceTest {
 
         when(userRepositoryPort.findById(userId)).thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED)).thenReturn(filledOrders);
-        when(instrumentRepositoryPort.findAllByIds(Set.of(TradingFixtures.ARS_INSTRUMENT_ID, TradingFixtures.PAMP_INSTRUMENT_ID)))
-                .thenReturn(List.of(TradingFixtures.arsInstrument(), TradingFixtures.pampInstrument()));
         when(marketDataRepositoryPort.findLatestByInstrumentIds(Set.of(TradingFixtures.PAMP_INSTRUMENT_ID)))
                 .thenReturn(Map.of(TradingFixtures.PAMP_INSTRUMENT_ID, TradingFixtures.pampMarketData()));
 

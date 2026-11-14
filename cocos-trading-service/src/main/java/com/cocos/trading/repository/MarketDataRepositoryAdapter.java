@@ -1,10 +1,8 @@
 package com.cocos.trading.repository;
 
 import com.cocos.trading.application.port.out.MarketDataRepositoryPort;
-import com.cocos.trading.domain.model.MarketData;
 import com.cocos.trading.repository.entity.MarketDataJpaEntity;
 import com.cocos.trading.repository.jpa.SpringDataMarketDataRepository;
-import com.cocos.trading.repository.mapper.PersistenceMapper;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -24,22 +22,21 @@ public class MarketDataRepositoryAdapter implements MarketDataRepositoryPort {
     private final SpringDataMarketDataRepository springDataMarketDataRepository;
 
     @Override
-    public Optional<MarketData> findLatestByInstrumentId(Long instrumentId) {
-        return springDataMarketDataRepository.findFirstByInstrumentIdOrderByDateDescIdDesc(instrumentId)
-                .map(PersistenceMapper::toDomain);
+    public Optional<MarketDataJpaEntity> findLatestByInstrumentId(Long instrumentId) {
+        return springDataMarketDataRepository.findFirstByInstrumentIdOrderByDateDescIdDesc(instrumentId);
     }
 
     @Override
-    public Map<Long, MarketData> findLatestByInstrumentIds(Collection<Long> instrumentIds) {
+    public Map<Long, MarketDataJpaEntity> findLatestByInstrumentIds(Collection<Long> instrumentIds) {
         if (instrumentIds == null || instrumentIds.isEmpty()) {
             return Collections.emptyMap();
         }
         List<MarketDataJpaEntity> allEntries =
                 springDataMarketDataRepository.findAllByInstrumentIdsOrderByDateDesc(instrumentIds);
 
-        Map<Long, MarketData> latestByInstrument = new LinkedHashMap<>();
+        Map<Long, MarketDataJpaEntity> latestByInstrument = new LinkedHashMap<>();
         for (MarketDataJpaEntity entity : allEntries) {
-            latestByInstrument.putIfAbsent(entity.getInstrumentId(), PersistenceMapper.toDomain(entity));
+            latestByInstrument.putIfAbsent(entity.getInstrumentId(), entity);
         }
         return latestByInstrument;
     }

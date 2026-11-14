@@ -11,7 +11,8 @@ import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.OrderType;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.entity.MarketDataJpaEntity;
-import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import com.cocos.trading.repository.entity.UserJpaEntity;
 import com.cocos.trading.repository.jpa.SpringDataInstrumentRepository;
 import com.cocos.trading.repository.jpa.SpringDataMarketDataRepository;
@@ -76,10 +77,10 @@ class PortfolioAndInstrumentControllerIT extends TradingApplicationIT {
                 LocalDate.of(2024, 7, 15)
         ));
 
-        orderRepository.save(new OrderJpaEntity(
+        orderRepository.save(new TransferOrderJpaEntity(
                 null,
-                arsInstrument.getId(),
-                savedUser.getId(),
+                arsInstrument,
+                savedUser,
                 100_000,
                 new BigDecimal("1.00"),
                 OrderType.MARKET,
@@ -88,10 +89,10 @@ class PortfolioAndInstrumentControllerIT extends TradingApplicationIT {
                 LocalDateTime.of(2024, 7, 1, 10, 0)
         ));
 
-        orderRepository.save(new OrderJpaEntity(
+        orderRepository.save(new TradeOrderJpaEntity(
                 null,
-                pampInstrument.getId(),
-                savedUser.getId(),
+                pampInstrument,
+                savedUser,
                 10,
                 new BigDecimal("800.00"),
                 OrderType.MARKET,

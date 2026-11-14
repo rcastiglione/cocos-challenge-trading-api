@@ -1,6 +1,6 @@
 package com.cocos.trading.application.strategy;
 
-import com.cocos.trading.domain.model.Order;
+import com.cocos.trading.repository.entity.OrderJpaEntity;
 
 /**
  * Strategy interface for routing, sizing, validating, and determining the initial status
@@ -17,12 +17,11 @@ public interface OrderExecutionStrategy {
     boolean supports(OrderExecutionContext context);
 
     /**
-     * Builds the resulting {@link Order} ready to be persisted in the database
+     * Builds the resulting {@link OrderJpaEntity} ready to be persisted in the database
      * (with status {@code FILLED}, {@code NEW}, or {@code REJECTED}).
      *
      * @param context The order execution context.
-     * @return The evaluated domain {@link Order}.
+     * @return The evaluated {@link OrderJpaEntity}.
      */
-    Order execute(OrderExecutionContext context);
+    OrderJpaEntity execute(OrderExecutionContext context);
 }
-

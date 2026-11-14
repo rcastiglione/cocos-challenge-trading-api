@@ -1,121 +1,84 @@
 package com.cocos.trading.domain.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.cocos.trading.application.service.AccountLedgerCalculator;
+import com.cocos.trading.controller.mapper.ApiMapper;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
-import com.cocos.trading.repository.entity.OrderJpaEntity;
-import com.cocos.trading.repository.mapper.PersistenceMapper;
+import com.cocos.trading.fixture.TradingFixtures;
+import com.cocos.trading.repository.entity.MarketDataJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("Domain Models, Value Objects & Polymorphism Unit Tests")
+@DisplayName("Value Objects, Ledger Calculations & Direct JPA Entity Mapping Unit Tests")
 class DomainModelTest {
 
     @Test
-    @DisplayName("Should calculate maximum whole shares from investment amount without fractions")
-    void shouldCalculateMaxShareSizeWithoutFractions() {
+    @DisplayName("Should calculate maximum whole shares from investment amount without fractions via AccountLedgerCalculator")
+    void shouldCalculateMaxShareQuantityWithoutFractions() {
         // 10,000 ARS / 925.85 ARS per share = 10.8008... -> 10 whole shares
-        int shares = Order.calculateMaxShareSize(MonetaryAmount.ars("10000.00"), MonetaryAmount.ars("925.85"));
+        int shares = AccountLedgerCalculator.calculateMaxShareQuantity(
+                MonetaryAmount.ars("10000.00"),
+                MonetaryAmount.ars("925.85")
+        );
         assertEquals(10, shares);
     }
 
     @Test
     @DisplayName("Should return 0 shares when investment amount is smaller than unit price")
     void shouldReturnZeroSharesWhenAmountLessThanUnitPrice() {
-        int shares = Order.calculateMaxShareSize(MonetaryAmount.ars("500.00"), MonetaryAmount.ars("925.85"));
+        int shares = AccountLedgerCalculator.calculateMaxShareQuantity(
+                MonetaryAmount.ars("500.00"),
+                MonetaryAmount.ars("925.85")
+        );
         assertEquals(0, shares);
     }
 
     @Test
-    @DisplayName("Should calculate daily return percentage accurately from close and previousClose")
+    @DisplayName("Should calculate daily return percentage accurately from close and previousClose via AccountLedgerCalculator")
     void shouldCalculateDailyReturnPercentage() {
-        MarketData marketData = MarketData.builder()
+        MarketDataJpaEntity marketData = MarketDataJpaEntity.builder()
                 .id(1L)
                 .instrumentId(47L)
-                .high(MonetaryAmount.ars("950.00"))
-                .low(MonetaryAmount.ars("900.00"))
-                .open(MonetaryAmount.ars("910.00"))
-                .close(MonetaryAmount.ars("925.85"))
-                .previousClose(MonetaryAmount.ars("906.35"))
+                .high(new BigDecimal("950.00"))
+                .low(new BigDecimal("900.00"))
+                .open(new BigDecimal("910.00"))
+                .close(new BigDecimal("925.85"))
+                .previousClose(new BigDecimal("906.35"))
                 .date(LocalDate.of(2024, 7, 15))
                 .build();
 
         // ((925.85 - 906.35) / 906.35) * 100 = 2.151486... -> 2.15%
-        assertEquals(new BigDecimal("2.15"), marketData.calculateDailyReturnPercentage());
+        assertEquals(new BigDecimal("2.15"), AccountLedgerCalculator.calculateDailyReturnPercentage(marketData));
     }
 
     @Test
-    @DisplayName("Should transition NEW TradeOrder to CANCELLED preserving TradeOrder type")
-    void shouldTransitionTradeOrderToCancelled() {
-        TradeOrder newOrder = TradeOrder.builder()
+    @DisplayName("Should compute total amount and signed cash impact directly on TradeOrderJpaEntity and TransferOrderJpaEntity")
+    void shouldComputeLedgerImpactsOnOrderJpaEntities() {
+        TradeOrderJpaEntity buyOrder = TradeOrderJpaEntity.builder()
                 .id(10L)
-                .instrumentId(47L)
-                .userId(1L)
-                .size(5)
-                .price(MonetaryAmount.ars("900.00"))
+                .user(TradingFixtures.defaultUser())
+                .instrument(TradingFixtures.pampInstrument())
+                .quantity(5)
+                .price(new BigDecimal("900.00"))
                 .type(OrderType.LIMIT)
                 .side(OrderSide.BUY)
-                .status(OrderStatus.NEW)
-                .datetime(LocalDateTime.now())
-                .build();
-
-        Order cancelled = newOrder.cancel();
-        assertInstanceOf(TradeOrder.class, cancelled);
-        assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
-        assertEquals(MonetaryAmount.ars("4500.00"), cancelled.getTotalAmount());
-        assertEquals(MonetaryAmount.ars("-4500.00"), cancelled.getCashImpact());
-    }
-
-    @Test
-    @DisplayName("Should enforce TradeOrder and TransferOrder side invariants")
-    void shouldEnforceOrderSubclassSideInvariants() {
-        assertThrows(BusinessRuleViolationException.class, () -> TradeOrder.builder()
-                .instrumentId(66L)
-                .userId(1L)
-                .size(1000)
-                .price(MonetaryAmount.ONE_ARS)
-                .type(OrderType.MARKET)
-                .side(OrderSide.CASH_IN)
-                .status(OrderStatus.FILLED)
-                .build());
-
-        assertThrows(BusinessRuleViolationException.class, () -> TransferOrder.builder()
-                .instrumentId(47L)
-                .userId(1L)
-                .size(10)
-                .price(MonetaryAmount.ars("900.00"))
-                .type(OrderType.MARKET)
-                .side(OrderSide.BUY)
-                .status(OrderStatus.FILLED)
-                .build());
-    }
-
-    @Test
-    @DisplayName("PersistenceMapper should discriminate OrderJpaEntity into TradeOrder or TransferOrder and wrap ARS MonetaryAmount")
-    void shouldDiscriminateEntityIntoCorrectOrderSubclass() {
-        OrderJpaEntity tradeEntity = OrderJpaEntity.builder()
-                .id(1L)
-                .instrumentId(47L)
-                .userId(1L)
-                .size(10)
-                .price(new BigDecimal("925.85"))
-                .type(OrderType.MARKET)
-                .side(OrderSide.BUY)
                 .status(OrderStatus.FILLED)
                 .datetime(LocalDateTime.now())
                 .build();
 
-        OrderJpaEntity transferEntity = OrderJpaEntity.builder()
-                .id(2L)
-                .instrumentId(66L)
-                .userId(1L)
-                .size(50000)
+        TransferOrderJpaEntity cashInOrder = TransferOrderJpaEntity.builder()
+                .id(11L)
+                .user(TradingFixtures.defaultUser())
+                .instrument(TradingFixtures.arsInstrument())
+                .quantity(50000)
                 .price(new BigDecimal("1.00"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_IN)
@@ -123,12 +86,36 @@ class DomainModelTest {
                 .datetime(LocalDateTime.now())
                 .build();
 
-        Order mappedTrade = PersistenceMapper.toDomain(tradeEntity);
-        Order mappedTransfer = PersistenceMapper.toDomain(transferEntity);
+        assertEquals(MonetaryAmount.ars("4500.00"), AccountLedgerCalculator.calculateTotalAmount(buyOrder));
+        assertEquals(MonetaryAmount.ars("-4500.00"), AccountLedgerCalculator.calculateCashImpact(buyOrder));
+        assertEquals(MonetaryAmount.ars("50000.00"), AccountLedgerCalculator.calculateCashImpact(cashInOrder));
+    }
 
-        assertInstanceOf(TradeOrder.class, mappedTrade);
-        assertInstanceOf(TransferOrder.class, mappedTransfer);
-        assertEquals(MonetaryAmount.ars("50000.00"), mappedTransfer.getCashImpact());
+    @Test
+    @DisplayName("ApiMapper should map OrderJpaEntity subclasses directly to OrderApi with nested UserSummaryApi, InstrumentSummaryApi, and quantity")
+    void shouldMapOrderJpaEntityDirectlyToOrderApi() {
+        TradeOrderJpaEntity orderEntity = TradeOrderJpaEntity.builder()
+                .id(105L)
+                .user(TradingFixtures.defaultUser())
+                .instrument(TradingFixtures.pampInstrument())
+                .quantity(10)
+                .price(new BigDecimal("925.85"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.BUY)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.of(2024, 6, 15, 14, 30, 0))
+                .build();
+
+        var orderApi = ApiMapper.toApi(orderEntity);
+
+        assertEquals(105L, orderApi.id());
+        assertEquals(1L, orderApi.user().id());
+        assertEquals("10001", orderApi.user().accountNumber());
+        assertEquals(47L, orderApi.instrument().id());
+        assertEquals("PAMP", orderApi.instrument().ticker());
+        assertEquals(10, orderApi.quantity());
+        assertEquals(new BigDecimal("925.85"), orderApi.price().amount());
+        assertEquals("ARS", orderApi.price().currency());
     }
 
     @Test

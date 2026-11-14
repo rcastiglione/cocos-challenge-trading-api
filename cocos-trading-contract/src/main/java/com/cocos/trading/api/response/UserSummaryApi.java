@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 /**
- * Semantic summary of the user identity and trading account within portfolio responses.
+ * Semantic summary of the user identity and trading account within portfolio and order responses.
  *
  * @param id            Unique identifier of the user.
  * @param accountNumber User's trading account number.

@@ -4,13 +4,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 /**
- * Semantic summary of static financial instrument identity embedded inside a portfolio position.
+ * Semantic summary of static financial instrument identity embedded inside portfolio positions and order responses.
  *
  * @param id     Unique identifier of the instrument.
  * @param ticker Ticker symbol of the instrument (e.g., {@code "PAMP"}).
  */
 @Builder
-@Schema(description = "Static financial instrument identity within a position")
+@Schema(description = "Static financial instrument identity summary")
 public record InstrumentSummaryApi(
         @Schema(description = "Instrument ID", example = "47")
         Long id,

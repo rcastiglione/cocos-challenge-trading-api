@@ -45,7 +45,7 @@ class InstrumentServiceTest {
 
         assertEquals(1, results.size());
         InstrumentQuote quote = results.getFirst();
-        assertEquals("PAMP", quote.instrument().ticker());
+        assertEquals("PAMP", quote.instrument().getTicker());
         assertEquals(MonetaryAmount.ars("925.85"), quote.lastPrice());
         assertEquals(MonetaryAmount.ars("906.35"), quote.previousClose());
         assertEquals(new BigDecimal("2.15"), quote.dailyReturnPercentage());
