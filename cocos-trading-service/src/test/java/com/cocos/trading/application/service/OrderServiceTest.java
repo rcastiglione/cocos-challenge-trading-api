@@ -363,19 +363,18 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("Should execute CASH_OUT transfer as FILLED when requested amount does not exceed availableCash")
+    @DisplayName("Should execute CASH_OUT transfer as FILLED resolving ARS instrument by ticker when requested amount does not exceed availableCash")
     void shouldExecuteCashOutTransferSuccessfullyWhenCashIsSufficient() {
         PlaceOrderCommand command = PlaceOrderCommand.builder()
                 .userId(TradingFixtures.DEFAULT_USER_ID)
-                .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
                 .side(OrderSide.CASH_OUT)
                 .type(OrderType.MARKET)
-                .quantity(20_000)
+                .amount(MonetaryAmount.ars("20000.00"))
                 .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
-        when(instrumentRepositoryPort.findById(TradingFixtures.ARS_INSTRUMENT_ID))
+        when(instrumentRepositoryPort.findByTicker("ARS"))
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
@@ -404,15 +403,14 @@ class OrderServiceTest {
         PlaceOrderCommand command = PlaceOrderCommand.builder()
                 .idempotencyKey(UUID.randomUUID())
                 .userId(TradingFixtures.DEFAULT_USER_ID)
-                .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
                 .side(OrderSide.CASH_OUT)
                 .type(OrderType.MARKET)
-                .quantity(60_000)
+                .amount(MonetaryAmount.ars("60000.00"))
                 .build();
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
-        when(instrumentRepositoryPort.findById(TradingFixtures.ARS_INSTRUMENT_ID))
+        when(instrumentRepositoryPort.findByTicker("ARS"))
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
@@ -459,10 +457,9 @@ class OrderServiceTest {
         PlaceOrderCommand command = PlaceOrderCommand.builder()
                 .idempotencyKey(sharedIdempotencyKey)
                 .userId(TradingFixtures.DEFAULT_USER_ID)
-                .instrumentId(TradingFixtures.ARS_INSTRUMENT_ID)
                 .side(OrderSide.CASH_OUT)
                 .type(OrderType.MARKET)
-                .quantity(25_000)
+                .amount(MonetaryAmount.ars("25000.00"))
                 .build();
 
         Set<UUID> lockedKeys = ConcurrentHashMap.newKeySet();
@@ -471,7 +468,7 @@ class OrderServiceTest {
 
         when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
-        when(instrumentRepositoryPort.findById(TradingFixtures.ARS_INSTRUMENT_ID))
+        when(instrumentRepositoryPort.findByTicker("ARS"))
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
         when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));

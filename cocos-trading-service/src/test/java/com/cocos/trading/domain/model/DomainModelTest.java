@@ -1,9 +1,12 @@
 package com.cocos.trading.domain.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.cocos.trading.api.response.TradeOrderApi;
+import com.cocos.trading.api.response.TransferOrderApi;
 import com.cocos.trading.application.service.AccountLedgerCalculator;
 import com.cocos.trading.controller.mapper.ApiMapper;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
@@ -92,9 +95,9 @@ class DomainModelTest {
     }
 
     @Test
-    @DisplayName("ApiMapper should map OrderJpaEntity subclasses directly to OrderApi with nested UserSummaryApi, InstrumentSummaryApi, and quantity")
+    @DisplayName("ApiMapper should map TradeOrderJpaEntity to TradeOrderApi (quantity/price) and TransferOrderJpaEntity to TransferOrderApi (amount)")
     void shouldMapOrderJpaEntityDirectlyToOrderApi() {
-        TradeOrderJpaEntity orderEntity = TradeOrderJpaEntity.builder()
+        TradeOrderJpaEntity tradeOrderEntity = TradeOrderJpaEntity.builder()
                 .id(105L)
                 .user(TradingFixtures.defaultUser())
                 .instrument(TradingFixtures.pampInstrument())
@@ -106,16 +109,37 @@ class DomainModelTest {
                 .datetime(LocalDateTime.of(2024, 6, 15, 14, 30, 0))
                 .build();
 
-        var orderApi = ApiMapper.toApi(orderEntity);
+        TradeOrderApi tradeOrderApi = assertInstanceOf(TradeOrderApi.class, ApiMapper.toApi(tradeOrderEntity));
 
-        assertEquals(105L, orderApi.id());
-        assertEquals(1L, orderApi.user().id());
-        assertEquals("10001", orderApi.user().accountNumber());
-        assertEquals(47L, orderApi.instrument().id());
-        assertEquals("PAMP", orderApi.instrument().ticker());
-        assertEquals(10, orderApi.quantity());
-        assertEquals(new BigDecimal("925.85"), orderApi.price().amount());
-        assertEquals("ARS", orderApi.price().currency());
+        assertEquals(105L, tradeOrderApi.id());
+        assertEquals(1L, tradeOrderApi.user().id());
+        assertEquals("10001", tradeOrderApi.user().accountNumber());
+        assertEquals(47L, tradeOrderApi.instrument().id());
+        assertEquals("PAMP", tradeOrderApi.instrument().ticker());
+        assertEquals(10, tradeOrderApi.quantity());
+        assertEquals(new BigDecimal("925.85"), tradeOrderApi.price().amount());
+        assertEquals("ARS", tradeOrderApi.price().currency());
+
+        TransferOrderJpaEntity transferOrderEntity = TransferOrderJpaEntity.builder()
+                .id(106L)
+                .user(TradingFixtures.defaultUser())
+                .instrument(TradingFixtures.arsInstrument())
+                .quantity(50_000)
+                .price(new BigDecimal("1.00"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.CASH_IN)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.of(2024, 6, 15, 14, 35, 0))
+                .build();
+
+        TransferOrderApi transferOrderApi = assertInstanceOf(TransferOrderApi.class, ApiMapper.toApi(transferOrderEntity));
+
+        assertEquals(106L, transferOrderApi.id());
+        assertEquals(1L, transferOrderApi.user().id());
+        assertEquals("10001", transferOrderApi.user().accountNumber());
+        assertEquals(new BigDecimal("50000.00"), transferOrderApi.amount().amount());
+        assertEquals("ARS", transferOrderApi.amount().currency());
+        assertEquals(com.cocos.trading.api.common.OrderStatusApi.FILLED, transferOrderApi.status());
     }
 
     @Test

@@ -88,8 +88,7 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         UserJpaEntity user = userRepositoryPort.findById(command.userId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", command.userId()));
 
-        InstrumentJpaEntity instrument = instrumentRepositoryPort.findById(command.instrumentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instrument", command.instrumentId()));
+        InstrumentJpaEntity instrument = resolveInstrument(command);
 
         Optional<MarketDataJpaEntity> latestMarketData = instrument.getType() == InstrumentType.MONEDA
                 ? Optional.empty()
@@ -127,6 +126,18 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         log.info("[order] Order processed and persisted: id={}, status={}, quantity={}, price={}, idempotencyKey={}",
                 savedOrder.getId(), savedOrder.getStatus(), savedOrder.getQuantity(), savedOrder.getPrice(), command.idempotencyKey());
         return savedOrder;
+    }
+
+    private InstrumentJpaEntity resolveInstrument(PlaceOrderCommand command) {
+        if (command.side() != null && command.side().isCashOperation() && command.instrumentId() == null) {
+            String currencyTicker = command.amount() != null
+                    ? command.amount().currency()
+                    : MonetaryAmount.ARS_CURRENCY;
+            return instrumentRepositoryPort.findByTicker(currencyTicker)
+                    .orElseThrow(() -> new ResourceNotFoundException("Instrument", currencyTicker));
+        }
+        return instrumentRepositoryPort.findById(command.instrumentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Instrument", command.instrumentId()));
     }
 
     @Override

@@ -17,6 +17,8 @@ import com.cocos.trading.api.common.MonetaryAmount;
 import com.cocos.trading.api.common.OrderSideApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import com.cocos.trading.api.request.OrderCreateRequestApi;
+import com.cocos.trading.api.request.TradeOrderRequestApi;
+import com.cocos.trading.api.request.TransferOrderRequestApi;
 import com.cocos.trading.domain.model.InstrumentType;
 import com.cocos.trading.domain.model.OrderSide;
 import com.cocos.trading.domain.model.OrderStatus;
@@ -130,7 +132,7 @@ class OrderControllerIT extends TradingApplicationIT {
     @Test
     @DisplayName("Should execute MARKET BUY order immediately as FILLED when user has sufficient cash")
     void shouldExecuteMarketBuyOrderSuccessfully() throws Exception {
-        OrderCreateRequestApi request = new OrderCreateRequestApi(
+        OrderCreateRequestApi request = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -154,6 +156,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$.quantity").value(10))
                 .andExpect(jsonPath("$.price.amount").value(925.85))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
+                .andExpect(jsonPath("$.amount").doesNotExist())
                 .andExpect(jsonPath("$.status").value("FILLED"));
 
         List<OrderJpaEntity> persistedOrders = orderRepository.findByUserIdAndStatusOrderByDatetimeAscIdAsc(
@@ -169,7 +172,7 @@ class OrderControllerIT extends TradingApplicationIT {
     @DisplayName("Should execute MARKET BUY order by total investment amount in ARS (no fractional shares)")
     void shouldExecuteMarketBuyOrderByAmountSuccessfully() throws Exception {
         // 10,000 ARS / 925.85 = 10 whole shares
-        OrderCreateRequestApi request = new OrderCreateRequestApi(
+        OrderCreateRequestApi request = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -187,6 +190,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$.quantity").value(10))
                 .andExpect(jsonPath("$.price.amount").value(925.85))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
+                .andExpect(jsonPath("$.amount").doesNotExist())
                 .andExpect(jsonPath("$.status").value("FILLED"));
     }
 
@@ -194,7 +198,7 @@ class OrderControllerIT extends TradingApplicationIT {
     @DisplayName("Should reject and persist order as REJECTED when user has insufficient funds for BUY")
     void shouldRejectOrderDueToInsufficientFunds() throws Exception {
         // 100 shares * 925.85 = 92,585 ARS > 50,000 ARS available
-        OrderCreateRequestApi request = new OrderCreateRequestApi(
+        OrderCreateRequestApi request = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -226,7 +230,7 @@ class OrderControllerIT extends TradingApplicationIT {
     @DisplayName("Should reject and persist order as REJECTED when user has insufficient share holdings for SELL")
     void shouldRejectOrderDueToInsufficientHoldings() throws Exception {
         // User has 0 shares of PAMP and attempts to sell 5 shares
-        OrderCreateRequestApi request = new OrderCreateRequestApi(
+        OrderCreateRequestApi request = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.SELL,
@@ -248,7 +252,7 @@ class OrderControllerIT extends TradingApplicationIT {
     @Test
     @DisplayName("Should create LIMIT order with status NEW and allow cancelling it to CANCELLED")
     void shouldCreateLimitOrderAsNewAndCancelIt() throws Exception {
-        OrderCreateRequestApi limitRequest = new OrderCreateRequestApi(
+        OrderCreateRequestApi limitRequest = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -289,7 +293,7 @@ class OrderControllerIT extends TradingApplicationIT {
     @Test
     @DisplayName("Should return 400 Bad Request when LIMIT order is missing price or when currency is not ARS")
     void shouldReturnBadRequestWhenLimitOrderMissingPriceOrCurrencyInvalid() throws Exception {
-        OrderCreateRequestApi invalidLimitRequest = new OrderCreateRequestApi(
+        OrderCreateRequestApi invalidLimitRequest = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -306,7 +310,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Bad Request"));
 
-        OrderCreateRequestApi unsupportedCurrencyRequest = new OrderCreateRequestApi(
+        OrderCreateRequestApi unsupportedCurrencyRequest = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -327,7 +331,7 @@ class OrderControllerIT extends TradingApplicationIT {
     @Test
     @DisplayName("Should expose custom business metrics on /actuator/prometheus after processing orders")
     void shouldExposeCustomMetricsOnActuatorPrometheusEndpoint() throws Exception {
-        OrderCreateRequestApi request = new OrderCreateRequestApi(
+        OrderCreateRequestApi request = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -351,17 +355,13 @@ class OrderControllerIT extends TradingApplicationIT {
     }
 
     @Test
-    @DisplayName("Should execute CASH_OUT transfer when funds are sufficient and return BusinessRuleViolationProblem when insufficient")
+    @DisplayName("Should execute CASH_OUT transfer with TransferOrderRequestApi (no instrumentId or type) and return TransferOrderApi")
     void shouldHandleCashOutTransferAndRejectExcessWithdrawal() throws Exception {
-        // 1. Valid CASH_OUT of 20,000 ARS (out of 50,000 ARS available)
-        OrderCreateRequestApi validCashOut = new OrderCreateRequestApi(
+        // 1. Valid CASH_OUT of 20,000 ARS (out of 50,000 ARS available) using TransferOrderRequestApi (resolves ARS by currency)
+        OrderCreateRequestApi validCashOut = new TransferOrderRequestApi(
                 savedUser.getId(),
-                arsInstrument.getId(),
                 OrderSideApi.CASH_OUT,
-                OrderTypeApi.MARKET,
-                20_000,
-                null,
-                null
+                MonetaryAmount.ars(new BigDecimal("20000.00"))
         );
 
         mockMvc.perform(post("/orders")
@@ -371,23 +371,20 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.user.id").value(savedUser.getId()))
                 .andExpect(jsonPath("$.user.accountNumber").value("10001"))
-                .andExpect(jsonPath("$.instrument.id").value(arsInstrument.getId()))
-                .andExpect(jsonPath("$.instrument.ticker").value("ARS"))
                 .andExpect(jsonPath("$.side").value("CASH_OUT"))
-                .andExpect(jsonPath("$.quantity").value(20000))
-                .andExpect(jsonPath("$.price.amount").value(1.00))
-                .andExpect(jsonPath("$.price.currency").value("ARS"))
+                .andExpect(jsonPath("$.amount.amount").value(20000.00))
+                .andExpect(jsonPath("$.amount.currency").value("ARS"))
+                .andExpect(jsonPath("$.instrument").doesNotExist())
+                .andExpect(jsonPath("$.type").doesNotExist())
+                .andExpect(jsonPath("$.quantity").doesNotExist())
+                .andExpect(jsonPath("$.price").doesNotExist())
                 .andExpect(jsonPath("$.status").value("FILLED"));
 
         // 2. Excess CASH_OUT of 40,000 ARS (> 30,000 ARS remaining availableCash) -> 409 BusinessRuleViolationProblem
-        OrderCreateRequestApi excessCashOut = new OrderCreateRequestApi(
+        OrderCreateRequestApi excessCashOut = new TransferOrderRequestApi(
                 savedUser.getId(),
-                arsInstrument.getId(),
                 OrderSideApi.CASH_OUT,
-                OrderTypeApi.MARKET,
-                40_000,
-                null,
-                null
+                MonetaryAmount.ars(new BigDecimal("40000.00"))
         );
 
         mockMvc.perform(post("/orders")
@@ -396,12 +393,53 @@ class OrderControllerIT extends TradingApplicationIT {
                         .content(objectMapper.writeValueAsString(excessCashOut)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Business Rule Violation"));
+
+        // 3. Invalid CASH_IN payload attempting to send 'quantity' instead of 'amount' -> 400 Bad Request
+        String invalidCashTransferJsonWithQuantity = String.format(
+                "{\"userId\":%d,\"side\":\"CASH_IN\",\"quantity\":50000}",
+                savedUser.getId()
+        );
+
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidCashTransferJsonWithQuantity))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Bad Request"));
+
+        // 4. Invalid CASH_IN payload missing 'amount' -> 400 Bad Request
+        OrderCreateRequestApi missingAmountTransfer = new TransferOrderRequestApi(
+                savedUser.getId(),
+                OrderSideApi.CASH_IN,
+                null
+        );
+
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(missingAmountTransfer)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Bad Request"));
+
+        // 5. Invalid CASH_IN payload with unsupported currency ('USD') -> 400 Bad Request
+        OrderCreateRequestApi unsupportedCurrencyTransfer = new TransferOrderRequestApi(
+                savedUser.getId(),
+                OrderSideApi.CASH_IN,
+                new MonetaryAmount(new BigDecimal("1000.00"), "USD")
+        );
+
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(unsupportedCurrencyTransfer)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Bad Request"));
     }
 
     @Test
     @DisplayName("Should return 400 Bad Request when Idempotency-Key header is missing or not a valid UUID")
     void shouldReturnBadRequestWhenIdempotencyKeyHeaderMissingOrInvalid() throws Exception {
-        OrderCreateRequestApi request = new OrderCreateRequestApi(
+        OrderCreateRequestApi request = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
@@ -431,14 +469,10 @@ class OrderControllerIT extends TradingApplicationIT {
     @DisplayName("Should store Idempotency-Key in Redis with 24h TTL and reject duplicate network retry with 409 Conflict")
     void shouldStoreIdempotencyKeyInRedisAndRejectDuplicateRetry() throws Exception {
         UUID idempotencyKey = UUID.randomUUID();
-        OrderCreateRequestApi cashInRequest = new OrderCreateRequestApi(
+        OrderCreateRequestApi cashInRequest = new TransferOrderRequestApi(
                 savedUser.getId(),
-                arsInstrument.getId(),
                 OrderSideApi.CASH_IN,
-                OrderTypeApi.MARKET,
-                25_000,
-                null,
-                null
+                MonetaryAmount.ars(new BigDecimal("25000.00"))
         );
 
         // 1st attempt succeeds (201 Created)
@@ -447,6 +481,11 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(cashInRequest)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.amount.amount").value(25000.00))
+                .andExpect(jsonPath("$.amount.currency").value("ARS"))
+                .andExpect(jsonPath("$.type").doesNotExist())
+                .andExpect(jsonPath("$.quantity").doesNotExist())
+                .andExpect(jsonPath("$.price").doesNotExist())
                 .andExpect(jsonPath("$.status").value("FILLED"));
 
         // Verify key is stored in Redis with ~24h TTL (86,400s)
@@ -474,7 +513,7 @@ class OrderControllerIT extends TradingApplicationIT {
     void shouldPreventConcurrentDoubleSpendingWithSameIdempotencyKey() throws Exception {
         int concurrentRequests = 10;
         UUID sharedIdempotencyKey = UUID.randomUUID();
-        OrderCreateRequestApi buyRequest = new OrderCreateRequestApi(
+        OrderCreateRequestApi buyRequest = new TradeOrderRequestApi(
                 savedUser.getId(),
                 pampInstrument.getId(),
                 OrderSideApi.BUY,

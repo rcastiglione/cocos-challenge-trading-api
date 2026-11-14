@@ -100,10 +100,18 @@ cocos-challenge-trading-api/
 
 ---
 
-### 3.4. Dimensionamiento de Órdenes (`quantity` vs `amount`), Persistencia de `REJECTED` y Validación de `CASH_OUT`
-- **Cálculo de `quantity` sin Fracciones**: El cliente puede enviar la cantidad exacta de acciones (`quantity`) o el monto total en ARS a invertir (`amount`). Cuando se envía `amount`, el motor calcula `quantity = floor(amount / executionPrice)` mediante `BigDecimal.divideToIntegralValue`, garantizando cero fracciones de acción (*fractional shares*) y sin exceder jamás el capital solicitado.
+### 3.4. Polimorfismo en el Contrato API (`OrderCreateRequestApi` & `OrderApi` con `@JsonTypeInfo` / `@JsonSubTypes`) para Separar Trade Orders (`quantity` & `price`) de Transfer Orders (`amount`)
+- **Eliminación del Anti-Patrón "Fat DTO" mediante `sealed interface` y Discriminación por `side`**:
+  En lugar de exponer un único DTO monolítico lleno de campos opcionales ocultos con `@JsonInclude(NON_NULL)`, modelamos el contrato público (`cocos-trading-contract`) con **Polimorfismo de Tipos en Java 21 (`sealed interface`) y Jackson (`@JsonTypeInfo(use = Id.NAME, include = As.EXISTING_PROPERTY, property = "side")`)**, reflejando 1:1 la jerarquía polimórfica de persistencia (`OrderJpaEntity` $\rightarrow$ `TradeOrderJpaEntity` | `TransferOrderJpaEntity`):
+  - **Trade Orders (`BUY` / `SELL` sobre `ACCIONES` $\rightarrow$ `TradeOrderRequestApi` & `TradeOrderApi`)**:
+    - En el *request* (`TradeOrderRequestApi`), el cliente puede enviar la cantidad exacta de acciones (`quantity`) o el monto total en ARS a invertir (`amount`), más el `price` límite cuando `type == LIMIT`. Cuando se envía `amount`, el motor calcula `quantity = floor(amount / executionPrice)` mediante `BigDecimal.divideToIntegralValue`, garantizando cero fracciones de acción (*fractional shares*) sin exceder jamás el capital solicitado.
+    - En el *response* (`TradeOrderApi`), el contrato expone estructuralmente **solo** la `quantity` entera de acciones ejecutada y el `price` unitario (`MonetaryAmount`), sin incluir el campo `amount`.
+  - **Transfer Orders (`CASH_IN` / `CASH_OUT` sobre `MONEDA` $\rightarrow$ `TransferOrderRequestApi` & `TransferOrderApi`)**:
+    - Representan flujos directos de efectivo fiduciario, no una orden de ejecución bursátil ni una compra de acciones a precio `$1.00`. Por ello, `TransferOrderRequestApi` requiere únicamente `userId`, `side` y `amount` (`MonetaryAmount`), eliminando por completo `instrumentId`, `type` (`MARKET`/`LIMIT`), `quantity` y `price` (y rechazando con `400 Bad Request` cualquier propiedad ajena mediante `@JsonIgnoreProperties(ignoreUnknown = false)` o cualquier moneda distinta de `"ARS"`).
+    - **Resolución Interna de Instrumento por Divisa (`amount.currency`) y Simetría Bidireccional (`Request -> Response`)**: El cliente no necesita conocer el ID interno de la tabla `instruments` para depositar o retirar pesos; `OrderService` resuelve automáticamente el instrumento `MONEDA` buscando por `ticker == amount.currency()` (`"ARS"` $\rightarrow$ `id = 66`), mientras que `ApiMapper` inyecta internamente `OrderType.MARKET` y `CashTransferExecutionStrategy` traduce el monto hacia las columnas físicas `instrumentid = 66`, `size`, `price = 1.00`, `type = 'MARKET'` y `status = 'FILLED'` de la tabla `orders` (**Zero DDL Schema Mutation**). Por consistencia bidireccional, dado que no se solicita `instrumentId` en la entrada, la respuesta (`TransferOrderApi`) retorna únicamente `id`, `user`, `amount`, `side`, `status` (siempre `"FILLED"` por ejecución inmediata) y `datetime`, omitiendo `instrument`, `type`, `quantity` y `price`.
+  - **Exhaustive Pattern Matching (`switch`)**: Tanto `OrderCreateRequestValidator` como `ApiMapper` utilizan *Pattern Matching for `switch`* exhaustivo de Java 21 sobre las `sealed interface`s (`OrderCreateRequestApi` y `OrderApi`), garantizando seguridad de tipos en tiempo de compilación sin condicionales complejos.
 - **Trazabilidad de Órdenes `REJECTED` (`BUY` / `SELL`)**: Si un usuario no posee suficiente `availableCash` para un `BUY`, no posee suficientes acciones (`availableShares < quantity`) para un `SELL`, o envía un `amount` inferior al precio de 1 acción (`quantity == 0`), la orden de mercado **se persiste** en la tabla `orders` con estado `REJECTED` para auditoría y se retorna en el *response*.
-- **Protección de Retiros (`CASH_OUT`)**: Si un usuario solicita una transferencia saliente (`CASH_OUT`) por un monto superior a su `availableCash`, el dominio rechaza la operación inmediatamente mediante `BusinessRuleViolationException` (`BusinessRuleViolationProblem` HTTP `409 Conflict`) sin persistir el retiro inválido.
+- **Protección de Retiros (`CASH_OUT`)**: Si un usuario solicita una transferencia saliente (`CASH_OUT`) por un `amount` superior a su `availableCash`, el dominio rechaza la operación inmediatamente mediante `BusinessRuleViolationException` (`BusinessRuleViolationProblem` HTTP `409 Conflict`) sin persistir el retiro inválido.
 
 ---
 
@@ -151,8 +159,8 @@ cocos-challenge-trading-api/
   - **Money Pattern End-to-End (`MonetaryAmount`)**:
     - En `cocos-trading-contract`, todos los importes y precios se transportan mediante el objeto compuesto `MonetaryAmount(BigDecimal amount, String currency)` (`{ "amount": 925.85, "currency": "ARS" }`), validado explícitamente en `OrderCreateRequestValidator`.
     - En `cocos-trading-service`, el *Value Object* de dominio `MonetaryAmount` encapsula la normalización de escala (`2` decimales `HALF_UP`) y toda la aritmética financiera segura (*currency-safe arithmetic*: `add`, `subtract`, `multiply`, `negate`, `divideToIntegralShares`, `isLessThan`), verificando `assertSameCurrency` antes de cada operación.
-  - **Agrupamiento Semántico de Entidades, Vocabulario Unificado (`quantity`) y Simetría Estricta de Contrato (`PortfolioApi` & `OrderApi`)**:
-    - Se impuso **simetría estricta en toda la superficie de la API** reutilizando los mismos *Summary DTOs* (`UserSummaryApi` para `"user": { "id", "accountNumber" }` e `InstrumentSummaryApi` para `"instrument": { "id", "ticker" }`) y el mismo vocabulario de unidades (`quantity`) tanto en la consulta de portafolio (`GET /portfolios/{userId}`) como en las peticiones y respuestas de órdenes (`POST /orders` para `MARKET`, `LIMIT`, `CASH_IN`, `CASH_OUT` y `POST /orders/{orderId}/cancel`).
+  - **Agrupamiento Semántico de Entidades, Contrato Polimórfico (`TradeOrderApi` vs. `TransferOrderApi`) y Simetría Estricta (`PortfolioApi` & `OrderApi`)**:
+    - Se impuso **simetría estricta en toda la superficie de la API** reutilizando los mismos *Summary DTOs* (`UserSummaryApi` para `"user": { "id", "accountNumber" }` e `InstrumentSummaryApi` para `"instrument": { "id", "ticker" }` en operaciones bursátiles). Asimismo, mediante las `sealed interface`s `OrderCreateRequestApi` y `OrderApi` discriminadas por `"side"` y *Pattern Matching* en `ApiMapper`, las órdenes de renta variable (`TradeOrderJpaEntity` $\rightarrow$ `TradeOrderApi`) exponen `instrument`, `quantity`, `price` y `type`, mientras que las transferencias monetarias (`TransferOrderJpaEntity` $\rightarrow$ `TransferOrderApi`) exponen únicamente `id`, `user`, `amount`, `side`, `status` (`FILLED`) y `datetime` (sin `instrument`, `type`, `quantity` ni `price`).
     - En `OrderJpaEntity`, el atributo `private Integer quantity` se mapea explícitamente con `@Column(name = "size", nullable = false)` para unificar el lenguaje ubicuo en Java y en el JSON sin alterar la columna física `size` de la tabla `orders`.
     - Al asociar `OrderJpaEntity` directamente con `UserJpaEntity` e `InstrumentJpaEntity` (hidratadas en memoria durante `OrderService.placeOrder` o vía `@ManyToOne` + `@EntityGraph` en `SpringDataOrderRepository`), `ApiMapper.toApi(OrderJpaEntity)` construye los resúmenes anidados con **cero overhead de I/O adicional** hacia PostgreSQL, elevando la **Developer Experience (DX)** para consumidores frontend y móviles.
   - **Preservación del Esquema SQL**: Siguiendo la regla del challenge (*"Los precios de los activos tienen que estar en pesos"*), las entidades JPA persisten los importes escalares en las columnas `NUMERIC` originales mientras los servicios y `ApiMapper` operan y exponen `MonetaryAmount`, manteniendo **100% intacto el esquema de base de datos original del evaluador**.
@@ -388,6 +396,29 @@ curl --location 'http://localhost:8080/orders' \
     }
 }'
 ```
+Ejemplo de respuesta (`201 Created` — retorna `quantity` de acciones calculada y `price` de ejecución, omitiendo `amount`):
+```json
+{
+  "id": 13,
+  "user": {
+    "id": 1,
+    "accountNumber": "10001"
+  },
+  "instrument": {
+    "id": 47,
+    "ticker": "PAMP"
+  },
+  "quantity": 16,
+  "price": {
+    "amount": 925.85,
+    "currency": "ARS"
+  },
+  "type": "MARKET",
+  "side": "BUY",
+  "status": "FILLED",
+  "datetime": "2024-06-15T14:31:00"
+}
+```
 
 #### C. Orden `LIMIT` de Compra (`BUY` — Estado `NEW`, `price` como `MonetaryAmount`)
 ```bash
@@ -407,20 +438,21 @@ curl --location 'http://localhost:8080/orders' \
 }'
 ```
 
-#### D. Transferencia Entrante de Dinero (`CASH_IN` sobre `MONEDA`)
+#### D. Transferencia Entrante de Dinero (`CASH_IN` usando `amount` — resuelve el instrumento `ARS` automáticamente desde `amount.currency`)
 ```bash
 curl --location 'http://localhost:8080/orders' \
 --header 'Idempotency-Key: 550e8400-e29b-41d4-a716-446655440004' \
 --header 'Content-Type: application/json' \
 --data '{
     "userId": 1,
-    "instrumentId": 66,
     "side": "CASH_IN",
-    "type": "MARKET",
-    "quantity": 50000
+    "amount": {
+        "amount": 50000.00,
+        "currency": "ARS"
+    }
 }'
 ```
-Ejemplo de respuesta (`201 Created`):
+Ejemplo de respuesta (`201 Created` — retorna `TransferOrderApi` con `amount` y `status: "FILLED"`, omitiendo `instrument`, `type`, `quantity` y `price`):
 ```json
 {
   "id": 15,
@@ -428,23 +460,17 @@ Ejemplo de respuesta (`201 Created`):
     "id": 1,
     "accountNumber": "10001"
   },
-  "instrument": {
-    "id": 66,
-    "ticker": "ARS"
-  },
-  "quantity": 50000,
-  "price": {
-    "amount": 1.00,
+  "amount": {
+    "amount": 50000.00,
     "currency": "ARS"
   },
-  "type": "MARKET",
   "side": "CASH_IN",
   "status": "FILLED",
   "datetime": "2024-06-15T14:35:00"
 }
 ```
 
-#### E. Transferencia Saliente / Retiro de Dinero (`CASH_OUT` sobre `MONEDA`)
+#### E. Transferencia Saliente / Retiro de Dinero (`CASH_OUT` usando `amount` — sin `instrumentId`, `type`, `quantity` ni `price`)
 Valida que el monto solicitado no exceda el `availableCash` del usuario (retornando `409 BusinessRuleViolationProblem` en caso de fondos insuficientes):
 ```bash
 curl --location 'http://localhost:8080/orders' \
@@ -452,10 +478,11 @@ curl --location 'http://localhost:8080/orders' \
 --header 'Content-Type: application/json' \
 --data '{
     "userId": 1,
-    "instrumentId": 66,
     "side": "CASH_OUT",
-    "type": "MARKET",
-    "quantity": 20000
+    "amount": {
+        "amount": 20000.00,
+        "currency": "ARS"
+    }
 }'
 ```
 

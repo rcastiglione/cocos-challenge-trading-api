@@ -6,14 +6,19 @@ import com.cocos.trading.api.common.OrderStatusApi;
 import com.cocos.trading.api.common.OrderTypeApi;
 import com.cocos.trading.api.request.InstrumentSearchFilterRequestApi;
 import com.cocos.trading.api.request.OrderCreateRequestApi;
+import com.cocos.trading.api.request.TradeOrderRequestApi;
+import com.cocos.trading.api.request.TransferOrderRequestApi;
 import com.cocos.trading.api.response.AssetPositionApi;
 import com.cocos.trading.api.response.InstrumentApi;
 import com.cocos.trading.api.response.InstrumentSummaryApi;
 import com.cocos.trading.api.response.OrderApi;
 import com.cocos.trading.api.response.PortfolioApi;
+import com.cocos.trading.api.response.TradeOrderApi;
+import com.cocos.trading.api.response.TransferOrderApi;
 import com.cocos.trading.api.response.UserSummaryApi;
 import com.cocos.trading.application.port.in.model.InstrumentSearchQuery;
 import com.cocos.trading.application.port.in.model.PlaceOrderCommand;
+import com.cocos.trading.application.service.AccountLedgerCalculator;
 import com.cocos.trading.domain.model.AssetPosition;
 import com.cocos.trading.domain.model.InstrumentQuote;
 import com.cocos.trading.domain.model.MonetaryAmount;
@@ -22,13 +27,15 @@ import com.cocos.trading.domain.model.OrderType;
 import com.cocos.trading.domain.model.Portfolio;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import com.cocos.trading.repository.entity.UserJpaEntity;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Utility mapper converting between API contract DTOs (`*Api`), application commands/models, and JPA entities.
+ * Utility mapper converting between polymorphic API contract DTOs (`*Api`), application commands/models, and JPA entities.
  */
 public final class ApiMapper {
 
@@ -56,23 +63,33 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts an {@link OrderCreateRequestApi} and {@code Idempotency-Key} UUID to a {@link PlaceOrderCommand}.
+     * Converts a polymorphic {@link OrderCreateRequestApi} ({@link TradeOrderRequestApi} or {@link TransferOrderRequestApi})
+     * and {@code Idempotency-Key} UUID to a {@link PlaceOrderCommand} using Java 21 exhaustive pattern matching.
      *
      * @param idempotencyKey Mandatory UUID idempotency key from the request header.
-     * @param request        The API order creation request.
+     * @param request        The polymorphic API order creation request.
      * @return The application {@link PlaceOrderCommand}.
      */
     public static PlaceOrderCommand toCommand(UUID idempotencyKey, OrderCreateRequestApi request) {
-        return PlaceOrderCommand.builder()
-                .idempotencyKey(idempotencyKey)
-                .userId(request.userId())
-                .instrumentId(request.instrumentId())
-                .side(OrderSide.valueOf(request.side().name()))
-                .type(OrderType.valueOf(request.type().name()))
-                .quantity(request.quantity())
-                .amount(toDomainMonetaryAmount(request.amount()))
-                .price(toDomainMonetaryAmount(request.price()))
-                .build();
+        return switch (request) {
+            case TradeOrderRequestApi trade -> PlaceOrderCommand.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .userId(trade.userId())
+                    .instrumentId(trade.instrumentId())
+                    .side(OrderSide.valueOf(trade.side().name()))
+                    .type(OrderType.valueOf(trade.type().name()))
+                    .quantity(trade.quantity())
+                    .amount(toDomainMonetaryAmount(trade.amount()))
+                    .price(toDomainMonetaryAmount(trade.price()))
+                    .build();
+            case TransferOrderRequestApi transfer -> PlaceOrderCommand.builder()
+                    .idempotencyKey(idempotencyKey)
+                    .userId(transfer.userId())
+                    .side(OrderSide.valueOf(transfer.side().name()))
+                    .type(OrderType.MARKET)
+                    .amount(toDomainMonetaryAmount(transfer.amount()))
+                    .build();
+        };
     }
 
     /**
@@ -141,26 +158,44 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts an {@link OrderJpaEntity} directly to an {@link OrderApi}, populating the nested {@link UserSummaryApi}
-     * and {@link InstrumentSummaryApi} objects for semantic symmetry with {@link PortfolioApi}.
+     * Converts a polymorphic {@link OrderJpaEntity} directly to its matching {@link OrderApi} subtype using Java 21 pattern matching:
+     * <ul>
+     *   <li>{@link TradeOrderJpaEntity} ({@code BUY}/{@code SELL}) &rarr; {@link TradeOrderApi} (populates {@code quantity} and {@code price}).</li>
+     *   <li>{@link TransferOrderJpaEntity} ({@code CASH_IN}/{@code CASH_OUT}) &rarr; {@link TransferOrderApi} (populates {@code amount}).</li>
+     * </ul>
      *
      * @param order The persisted {@link OrderJpaEntity}.
-     * @return The {@link OrderApi} response DTO.
+     * @return The polymorphic {@link OrderApi} response DTO ({@link TradeOrderApi} or {@link TransferOrderApi}).
      */
     public static OrderApi toApi(OrderJpaEntity order) {
-        return OrderApi.builder()
-                .id(order.getId())
-                .user(toUserSummaryApi(order.getUser()))
-                .instrument(toInstrumentSummaryApi(order.getInstrument()))
-                .quantity(order.getQuantity())
-                .price(order.getPrice() != null
-                        ? com.cocos.trading.api.common.MonetaryAmount.ars(order.getPrice())
-                        : null)
-                .type(OrderTypeApi.valueOf(order.getType().name()))
-                .side(OrderSideApi.valueOf(order.getSide().name()))
-                .status(OrderStatusApi.valueOf(order.getStatus().name()))
-                .datetime(order.getDatetime() != null ? order.getDatetime().format(ISO_DATETIME_FORMATTER) : null)
-                .build();
+        String formattedDatetime = order.getDatetime() != null
+                ? order.getDatetime().format(ISO_DATETIME_FORMATTER)
+                : null;
+
+        return switch (order) {
+            case TransferOrderJpaEntity transferOrder -> TransferOrderApi.builder()
+                    .id(transferOrder.getId())
+                    .user(toUserSummaryApi(transferOrder.getUser()))
+                    .amount(toContractMonetaryAmount(AccountLedgerCalculator.calculateTotalAmount(transferOrder)))
+                    .side(OrderSideApi.valueOf(transferOrder.getSide().name()))
+                    .status(OrderStatusApi.valueOf(transferOrder.getStatus().name()))
+                    .datetime(formattedDatetime)
+                    .build();
+            case TradeOrderJpaEntity tradeOrder -> TradeOrderApi.builder()
+                    .id(tradeOrder.getId())
+                    .user(toUserSummaryApi(tradeOrder.getUser()))
+                    .instrument(toInstrumentSummaryApi(tradeOrder.getInstrument()))
+                    .quantity(tradeOrder.getQuantity())
+                    .price(tradeOrder.getPrice() != null
+                            ? com.cocos.trading.api.common.MonetaryAmount.ars(tradeOrder.getPrice())
+                            : null)
+                    .type(OrderTypeApi.valueOf(tradeOrder.getType().name()))
+                    .side(OrderSideApi.valueOf(tradeOrder.getSide().name()))
+                    .status(OrderStatusApi.valueOf(tradeOrder.getStatus().name()))
+                    .datetime(formattedDatetime)
+                    .build();
+            default -> throw new IllegalStateException("Unsupported OrderJpaEntity subtype: " + order.getClass().getName());
+        };
     }
 
     private static UserSummaryApi toUserSummaryApi(UserJpaEntity user) {

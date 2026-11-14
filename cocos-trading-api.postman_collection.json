@@ -336,14 +336,14 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_IN\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  }\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Deposits ARS into the user's account using the MONEDA instrument and returns nested user ({id, accountNumber}) and instrument ({id: 66, ticker: 'ARS'}) summary objects."
+        "description": "Deposits ARS into the user's account via the polymorphic TransferOrderRequestApi (requires only 'userId', 'side', and 'amount'; resolves the ARS MONEDA instrument internally from amount.currency) and returns TransferOrderApi with nested user, amount, and status=FILLED (omitting instrument, type, quantity, and price)."
       },
       "response": [
         {
@@ -362,7 +362,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_IN\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
+              "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/orders",
@@ -379,7 +379,7 @@
               "value": "application/json"
             }
           ],
-          "body": "{\n  \"id\": 15,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 66,\n    \"ticker\": \"ARS\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 1.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"CASH_IN\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:35:00\"\n}"
+          "body": "{\n  \"id\": 15,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_IN\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:35:00\"\n}"
         }
       ]
     },
@@ -400,14 +400,14 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_OUT\",\n  \"type\": \"MARKET\",\n  \"quantity\": 20000\n}"
+          "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_OUT\",\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  }\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/orders",
           "host": ["{{baseUrl}}"],
           "path": ["orders"]
         },
-        "description": "Withdraws ARS from the user's account using the MONEDA instrument (validates that requested amount does not exceed availableCash) and returns nested user ({id, accountNumber}) and instrument ({id: 66, ticker: 'ARS'}) summary objects."
+        "description": "Withdraws ARS from the user's account via the polymorphic TransferOrderRequestApi (requires only 'userId', 'side', and 'amount'; resolves the ARS MONEDA instrument internally from amount.currency and validates availableCash) and returns TransferOrderApi with nested user, amount, and status=FILLED (omitting instrument, type, quantity, and price)."
       },
       "response": [
         {
@@ -426,7 +426,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 66,\n  \"side\": \"CASH_OUT\",\n  \"type\": \"MARKET\",\n  \"quantity\": 20000\n}"
+              "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_OUT\",\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  }\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/orders",
@@ -443,7 +443,7 @@
               "value": "application/json"
             }
           ],
-          "body": "{\n  \"id\": 16,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 66,\n    \"ticker\": \"ARS\"\n  },\n  \"quantity\": 20000,\n  \"price\": {\n    \"amount\": 1.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"CASH_OUT\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:36:00\"\n}"
+          "body": "{\n  \"id\": 16,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_OUT\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:36:00\"\n}"
         }
       ]
     },

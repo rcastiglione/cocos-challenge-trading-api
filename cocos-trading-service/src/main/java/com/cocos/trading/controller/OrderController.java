@@ -32,9 +32,11 @@ public class OrderController implements OrderContractApi {
     private final PlaceOrderUseCase placeOrderUseCase;
     private final CancelOrderUseCase cancelOrderUseCase;
 
-    @InitBinder("orderCreateRequestApi")
+    @InitBinder
     public void initBinder(WebDataBinder binder) {
-        binder.addValidators(new OrderCreateRequestValidator());
+        if (binder.getTarget() != null && OrderCreateRequestApi.class.isAssignableFrom(binder.getTarget().getClass())) {
+            binder.addValidators(new OrderCreateRequestValidator());
+        }
     }
 
     @Override

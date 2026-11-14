@@ -29,6 +29,14 @@ public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
     }
 
     @Override
+    public Optional<InstrumentJpaEntity> findByTicker(String ticker) {
+        if (ticker == null || ticker.isBlank()) {
+            return Optional.empty();
+        }
+        return springDataInstrumentRepository.findByTickerIgnoreCase(ticker.trim());
+    }
+
+    @Override
     public List<InstrumentJpaEntity> findAllByIds(Collection<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();

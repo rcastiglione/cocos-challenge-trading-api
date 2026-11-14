@@ -2,12 +2,15 @@ package com.cocos.trading.controller.validator;
 
 import com.cocos.trading.api.common.OrderTypeApi;
 import com.cocos.trading.api.request.OrderCreateRequestApi;
+import com.cocos.trading.api.request.TradeOrderRequestApi;
+import com.cocos.trading.api.request.TransferOrderRequestApi;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
 
 /**
- * Spring {@link Validator} for {@link OrderCreateRequestApi}.
- * Enforces required fields, positive quantities/amounts, currency invariants, and LIMIT order price rules.
+ * Spring {@link Validator} for the polymorphic {@link OrderCreateRequestApi} hierarchy
+ * ({@link TradeOrderRequestApi} and {@link TransferOrderRequestApi}).
+ * Uses Java 21 exhaustive pattern matching over the {@code sealed interface} to enforce subtype-specific invariants.
  */
 public class OrderCreateRequestValidator implements Validator {
 
@@ -33,6 +36,21 @@ public class OrderCreateRequestValidator implements Validator {
 
         ValidatorUtils.rejectIfNull(
                 errors,
+                request.side(),
+                "side",
+                "side.required",
+                "side is required."
+        );
+
+        switch (request) {
+            case TradeOrderRequestApi tradeRequest -> validateTradeOrder(tradeRequest, errors);
+            case TransferOrderRequestApi transferRequest -> validateTransferOrder(transferRequest, errors);
+        }
+    }
+
+    private void validateTradeOrder(TradeOrderRequestApi request, Errors errors) {
+        ValidatorUtils.rejectIfNull(
+                errors,
                 request.instrumentId(),
                 "instrumentId",
                 "instrumentId.required",
@@ -41,14 +59,6 @@ public class OrderCreateRequestValidator implements Validator {
         if (request.instrumentId() != null && request.instrumentId() <= 0) {
             errors.rejectValue("instrumentId", "instrumentId.invalid", "instrumentId must be greater than 0.");
         }
-
-        ValidatorUtils.rejectIfNull(
-                errors,
-                request.side(),
-                "side",
-                "side.required",
-                "side is required."
-        );
 
         ValidatorUtils.rejectIfNull(
                 errors,
@@ -109,6 +119,24 @@ public class OrderCreateRequestValidator implements Validator {
                         "price.amount must be greater than 0."
                 );
             }
+        }
+    }
+
+    private void validateTransferOrder(TransferOrderRequestApi request, Errors errors) {
+        if (request.amount() == null) {
+            errors.rejectValue(
+                    "amount",
+                    "amount.required",
+                    "amount is required for CASH_IN and CASH_OUT transfers."
+            );
+        } else {
+            ValidatorUtils.validateMonetaryAmount(
+                    errors,
+                    request.amount(),
+                    "amount",
+                    "amount.invalid",
+                    "amount.amount must be greater than 0."
+            );
         }
     }
 }

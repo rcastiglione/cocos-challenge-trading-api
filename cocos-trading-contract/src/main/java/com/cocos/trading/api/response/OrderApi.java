@@ -1,53 +1,46 @@
 package com.cocos.trading.api.response;
 
-import com.cocos.trading.api.common.MonetaryAmount;
 import com.cocos.trading.api.common.OrderSideApi;
 import com.cocos.trading.api.common.OrderStatusApi;
-import com.cocos.trading.api.common.OrderTypeApi;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.Builder;
 
 /**
- * API representation of a trading order stored in the platform.
- *
- * @param id         Unique order identifier.
- * @param user       Semantic summary of the user identity and trading account.
- * @param instrument Semantic summary of the target financial instrument.
- * @param quantity   Quantity of shares/units.
- * @param price      Execution or limit price in ARS.
- * @param type       Order execution type (MARKET, LIMIT).
- * @param side       Order side (BUY, SELL, CASH_IN, CASH_OUT).
- * @param status     Order status (NEW, FILLED, REJECTED, CANCELLED).
- * @param datetime   ISO-8601 formatted timestamp of the order.
+ * Polymorphic API representation of an order stored in the platform.
+ * <p>
+ * Discriminates based on the existing {@code side} property:
+ * <ul>
+ *   <li>{@link TradeOrderApi} when {@code side} is {@code BUY} or {@code SELL} (exposes {@code quantity}, {@code price}, and {@code type}).</li>
+ *   <li>{@link TransferOrderApi} when {@code side} is {@code CASH_IN} or {@code CASH_OUT} (exposes {@code amount}).</li>
+ * </ul>
+ * </p>
  */
-@Builder
-@Schema(description = "Order execution details")
-public record OrderApi(
-        @Schema(description = "Order ID", example = "105")
-        Long id,
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.EXISTING_PROPERTY,
+        property = "side",
+        visible = true
+)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = TradeOrderApi.class, names = {"BUY", "SELL"}),
+        @JsonSubTypes.Type(value = TransferOrderApi.class, names = {"CASH_IN", "CASH_OUT"})
+})
+@Schema(
+        description = "Polymorphic order execution details (TradeOrderApi for BUY/SELL, TransferOrderApi for CASH_IN/CASH_OUT)",
+        discriminatorProperty = "side",
+        subTypes = {TradeOrderApi.class, TransferOrderApi.class}
+)
+public sealed interface OrderApi
+        permits TradeOrderApi, TransferOrderApi {
 
-        @Schema(description = "User identity and trading account summary")
-        UserSummaryApi user,
+    Long id();
 
-        @Schema(description = "Target financial instrument summary")
-        InstrumentSummaryApi instrument,
+    UserSummaryApi user();
 
-        @Schema(description = "Quantity of shares or cash units", example = "10")
-        Integer quantity,
+    OrderSideApi side();
 
-        @Schema(description = "Execution or limit price in ARS")
-        MonetaryAmount price,
+    OrderStatusApi status();
 
-        @Schema(description = "Order type", example = "MARKET")
-        OrderTypeApi type,
-
-        @Schema(description = "Order side", example = "BUY")
-        OrderSideApi side,
-
-        @Schema(description = "Order status", example = "FILLED")
-        OrderStatusApi status,
-
-        @Schema(description = "Order creation timestamp", example = "2024-06-15T14:30:00")
-        String datetime
-) {
+    String datetime();
 }
