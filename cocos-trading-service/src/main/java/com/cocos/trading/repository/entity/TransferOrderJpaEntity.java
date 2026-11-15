@@ -13,7 +13,8 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 /**
- * Concrete JPA entity representing a cash transfer movement ({@link OrderSide#CASH_IN} or {@link OrderSide#CASH_OUT})
+ * Concrete JPA entity representing a cash transfer movement
+ * ({@link OrderSide#CASH_IN} or {@link OrderSide#CASH_OUT})
  * on a currency instrument ({@code MONEDA}).
  */
 @Entity
@@ -33,9 +34,7 @@ public class TransferOrderJpaEntity extends OrderJpaEntity {
             OrderType type,
             OrderSide side,
             OrderStatus status,
-            LocalDateTime datetime
-    ) {
+            LocalDateTime datetime) {
         super(id, instrument, user, quantity, price, type, side, status, datetime);
     }
 }
-

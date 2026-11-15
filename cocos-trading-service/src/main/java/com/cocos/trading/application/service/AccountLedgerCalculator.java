@@ -11,8 +11,10 @@ import java.math.RoundingMode;
 import java.util.List;
 
 /**
- * Application calculation utility for deriving order totals, cash balance impacts, share quantity sizing,
- * available cash balances, net share holdings, and daily return percentages directly from polymorphic JPA entities.
+ * Application calculation utility for deriving order totals, cash balance
+ * impacts, share quantity sizing,
+ * available cash balances, net share holdings, and daily return percentages
+ * directly from polymorphic JPA entities.
  */
 public final class AccountLedgerCalculator {
 
@@ -26,12 +28,14 @@ public final class AccountLedgerCalculator {
     }
 
     /**
-     * Calculates the maximum whole number of shares/units that can be traded for a given total investment amount
+     * Calculates the maximum whole number of shares/units that can be traded for a
+     * given total investment amount
      * and unit price (fractional shares are not permitted).
      *
      * @param amount    Total investment amount as a {@link MonetaryAmount}.
      * @param unitPrice Price per share/unit as a {@link MonetaryAmount}.
-     * @return Maximum integer quantity of shares ({@code floor(amount / unitPrice)}).
+     * @return Maximum integer quantity of shares
+     *         ({@code floor(amount / unitPrice)}).
      */
     public static int calculateMaxShareQuantity(MonetaryAmount amount, MonetaryAmount unitPrice) {
         if (amount == null || unitPrice == null) {
@@ -60,11 +64,13 @@ public final class AccountLedgerCalculator {
     }
 
     /**
-     * Calculates the signed cash balance impact of a polymorphic order ({@link TradeOrderJpaEntity} or
+     * Calculates the signed cash balance impact of a polymorphic order
+     * ({@link TradeOrderJpaEntity} or
      * {@link TransferOrderJpaEntity}) when {@code FILLED}.
      *
      * @param order The order entity.
-     * @return Signed cash delta as a {@link MonetaryAmount} ({@code +} for inflows/sales, {@code -} for outflows/purchases).
+     * @return Signed cash delta as a {@link MonetaryAmount} ({@code +} for
+     *         inflows/sales, {@code -} for outflows/purchases).
      */
     public static MonetaryAmount calculateCashImpact(OrderJpaEntity order) {
         if (order == null || order.getQuantity() == null || order.getSide() == null) {
@@ -87,8 +93,10 @@ public final class AccountLedgerCalculator {
     }
 
     /**
-     * Calculates the net available cash in ARS from all {@code FILLED} orders of a user
-     * by summing each order's cash impact via {@link #calculateCashImpact(OrderJpaEntity)}.
+     * Calculates the net available cash in ARS from all {@code FILLED} orders of a
+     * user
+     * by summing each order's cash impact via
+     * {@link #calculateCashImpact(OrderJpaEntity)}.
      *
      * @param filledOrders Chronological list of {@code FILLED} orders.
      * @return Net available cash as an {@code ARS} {@link MonetaryAmount}.
@@ -109,7 +117,8 @@ public final class AccountLedgerCalculator {
     }
 
     /**
-     * Calculates the net quantity of shares currently held by a user for a specific instrument
+     * Calculates the net quantity of shares currently held by a user for a specific
+     * instrument
      * from all {@code FILLED} {@link TradeOrderJpaEntity} instances.
      *
      * @param filledOrders Chronological list of {@code FILLED} orders.
@@ -140,11 +149,13 @@ public final class AccountLedgerCalculator {
     }
 
     /**
-     * Calculates the daily return percentage using {@code close} and {@code previousClose} from {@link MarketDataJpaEntity}:
+     * Calculates the daily return percentage using {@code close} and
+     * {@code previousClose} from {@link MarketDataJpaEntity}:
      * {@code ((close - previousClose) / previousClose) * 100}.
      *
      * @param marketData The market data entry.
-     * @return Daily return percentage rounded to 2 decimal places, or {@code 0.00} if prices are missing/zero.
+     * @return Daily return percentage rounded to 2 decimal places, or {@code 0.00}
+     *         if prices are missing/zero.
      */
     public static BigDecimal calculateDailyReturnPercentage(MarketDataJpaEntity marketData) {
         if (marketData == null

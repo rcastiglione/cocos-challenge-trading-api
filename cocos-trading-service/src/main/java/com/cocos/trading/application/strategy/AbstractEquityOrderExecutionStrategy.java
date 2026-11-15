@@ -13,12 +13,14 @@ import java.time.LocalDateTime;
 
 /**
  * Abstract base class for equity ({@code ACCIONES}) order execution strategies,
- * providing shared share quantity calculation and buying-power/holdings validation logic.
+ * providing shared share quantity calculation and buying-power/holdings
+ * validation logic.
  */
 public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecutionStrategy {
 
     /**
-     * Resolves the unit execution price for the order (e.g., market close price or limit price).
+     * Resolves the unit execution price for the order (e.g., market close price or
+     * limit price).
      *
      * @param context The order execution context.
      * @return The resolved unit price as a {@link MonetaryAmount}.
@@ -26,7 +28,8 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
     protected abstract MonetaryAmount resolveExecutionPrice(OrderExecutionContext context);
 
     /**
-     * Returns the target status when the order passes all buying-power/holdings validations
+     * Returns the target status when the order passes all buying-power/holdings
+     * validations
      * ({@link OrderStatus#FILLED} for MARKET, {@link OrderStatus#NEW} for LIMIT).
      *
      * @return The target {@link OrderStatus}.
@@ -38,13 +41,12 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
         PlaceOrderCommand command = context.command();
         if (command.side() == null || command.side().isCashOperation()) {
             throw new BusinessRuleViolationException(
-                    "Equity order execution requires a market trade side (BUY or SELL), but received: " + command.side()
-            );
+                    "Equity order execution requires a market trade side (BUY or SELL), but received: "
+                            + command.side());
         }
         if (context.instrument().getType() == InstrumentType.MONEDA) {
             throw new BusinessRuleViolationException(
-                    "BUY and SELL equity orders cannot be placed on MONEDA instruments. Use CASH_IN or CASH_OUT."
-            );
+                    "BUY and SELL equity orders cannot be placed on MONEDA instruments. Use CASH_IN or CASH_OUT.");
         }
 
         MonetaryAmount executionPrice = resolveExecutionPrice(context);
@@ -76,8 +78,7 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
     private OrderStatus determineStatus(
             OrderExecutionContext context,
             MonetaryAmount executionPrice,
-            int resolvedQuantity
-    ) {
+            int resolvedQuantity) {
         if (resolvedQuantity <= 0) {
             return OrderStatus.REJECTED;
         }

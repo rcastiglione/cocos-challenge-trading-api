@@ -33,8 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Application service implementing {@link GetPortfolioUseCase}.
- * Calculates a user's total account value, available ARS cash, and equity positions
- * with market valuation, weighted average total return percentage, and daily return percentage.
+ * Calculates a user's total account value, available ARS cash, and equity
+ * positions
+ * with market valuation, weighted average total return percentage, and daily
+ * return percentage.
  */
 @Slf4j
 @Service
@@ -66,8 +68,8 @@ public class PortfolioService implements GetPortfolioUseCase {
                 .map(InstrumentJpaEntity::getId)
                 .collect(Collectors.toSet());
 
-        Map<Long, MarketDataJpaEntity> latestMarketDataById =
-                marketDataRepositoryPort.findLatestByInstrumentIds(equityInstrumentIds);
+        Map<Long, MarketDataJpaEntity> latestMarketDataById = marketDataRepositoryPort
+                .findLatestByInstrumentIds(equityInstrumentIds);
 
         Map<Long, PositionAccumulator> accumulators = new LinkedHashMap<>();
         for (OrderJpaEntity order : filledOrders) {
@@ -80,8 +82,7 @@ public class PortfolioService implements GetPortfolioUseCase {
             }
             PositionAccumulator acc = accumulators.computeIfAbsent(
                     instrument.getId(),
-                    id -> new PositionAccumulator(instrument)
-            );
+                    id -> new PositionAccumulator(instrument));
             acc.apply(tradeOrder);
         }
 
@@ -142,7 +143,8 @@ public class PortfolioService implements GetPortfolioUseCase {
     }
 
     /**
-     * Stateful accumulator computing net share quantity and weighted average purchase price (WAC).
+     * Stateful accumulator computing net share quantity and weighted average
+     * purchase price (WAC).
      */
     private static final class PositionAccumulator {
         private final InstrumentJpaEntity instrument;
@@ -162,7 +164,8 @@ public class PortfolioService implements GetPortfolioUseCase {
                 BigDecimal orderCost = order.getPrice().multiply(BigDecimal.valueOf(order.getQuantity()));
                 totalCostBasis = totalCostBasis.add(orderCost);
                 quantity += order.getQuantity();
-                averageCost = totalCostBasis.divide(BigDecimal.valueOf(quantity), CALCULATION_SCALE, RoundingMode.HALF_UP);
+                averageCost = totalCostBasis.divide(BigDecimal.valueOf(quantity), CALCULATION_SCALE,
+                        RoundingMode.HALF_UP);
             } else if (order.getSide() == OrderSide.SELL) {
                 quantity -= order.getQuantity();
                 if (quantity <= 0) {

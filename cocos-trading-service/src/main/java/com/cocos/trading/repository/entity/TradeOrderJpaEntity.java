@@ -13,8 +13,10 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 /**
- * Concrete JPA entity representing a market trade order ({@link OrderSide#BUY} or {@link OrderSide#SELL})
- * executed as {@link OrderType#MARKET} or {@link OrderType#LIMIT} on an equity instrument ({@code ACCIONES}).
+ * Concrete JPA entity representing a market trade order ({@link OrderSide#BUY}
+ * or {@link OrderSide#SELL})
+ * executed as {@link OrderType#MARKET} or {@link OrderType#LIMIT} on an equity
+ * instrument ({@code ACCIONES}).
  */
 @Entity
 @DiscriminatorValue("TRADE")
@@ -33,9 +35,7 @@ public class TradeOrderJpaEntity extends OrderJpaEntity {
             OrderType type,
             OrderSide side,
             OrderStatus status,
-            LocalDateTime datetime
-    ) {
+            LocalDateTime datetime) {
         super(id, instrument, user, quantity, price, type, side, status, datetime);
     }
 }
-
