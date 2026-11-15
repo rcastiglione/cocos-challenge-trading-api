@@ -32,140 +32,150 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Application service implementing {@link PlaceOrderUseCase} and {@link CancelOrderUseCase}.
- * Orchestrates order routing via polymorphic {@link OrderExecutionStrategy} implementations,
- * manages order state transitions (such as cancellation), enforces distributed idempotency locking
- * via {@link IdempotencyRepositoryPort}, and delegates telemetry recording to {@link TradingMetricsService}.
+ * Application service implementing {@link PlaceOrderUseCase} and
+ * {@link CancelOrderUseCase}.
+ * Orchestrates order routing via polymorphic {@link OrderExecutionStrategy}
+ * implementations,
+ * manages order state transitions (such as cancellation), enforces distributed
+ * idempotency locking
+ * via {@link IdempotencyRepositoryPort}, and delegates telemetry recording to
+ * {@link TradingMetricsService}.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
 
-    public static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
+        public static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
 
-    // =================================================================================================================
-    // TODO [Production Database Schema Constraint — UNIQUE(idempotency_key)]:
-    // We currently enforce Idempotency and Distributed Locking exclusively via Redis (24-hour TTL) to strictly respect
-    // the fixed PostgreSQL schema provided by the challenge evaluator (NeonDB / init.sql) without executing DDL
-    // mutations. In a production environment, a permanent database-level constraint `UNIQUE(idempotency_key)` on the
-    // `orders` table would be added via a future Flyway/Liquibase migration to complement the Redis fast-path lock.
-    // =================================================================================================================
-    private final IdempotencyRepositoryPort idempotencyRepositoryPort;
-    private final UserRepositoryPort userRepositoryPort;
-    private final InstrumentRepositoryPort instrumentRepositoryPort;
-    private final MarketDataRepositoryPort marketDataRepositoryPort;
-    private final OrderRepositoryPort orderRepositoryPort;
-    private final List<OrderExecutionStrategy> executionStrategies;
-    private final TradingMetricsService tradingMetricsService;
+        // =================================================================================================================
+        // TODO [Production Database Schema Constraint — UNIQUE(idempotency_key)]:
+        // We currently enforce Idempotency and Distributed Locking exclusively via
+        // Redis (24-hour TTL) to strictly respect
+        // the fixed PostgreSQL schema provided by the challenge evaluator (NeonDB /
+        // init.sql) without executing DDL
+        // mutations. In a production environment, a permanent database-level constraint
+        // `UNIQUE(idempotency_key)` on the
+        // `orders` table would be added via a future Flyway/Liquibase migration to
+        // complement the Redis fast-path lock.
+        // =================================================================================================================
+        private final IdempotencyRepositoryPort idempotencyRepositoryPort;
+        private final UserRepositoryPort userRepositoryPort;
+        private final InstrumentRepositoryPort instrumentRepositoryPort;
+        private final MarketDataRepositoryPort marketDataRepositoryPort;
+        private final OrderRepositoryPort orderRepositoryPort;
+        private final List<OrderExecutionStrategy> executionStrategies;
+        private final TradingMetricsService tradingMetricsService;
 
-    @Override
-    @Transactional
-    public OrderJpaEntity placeOrder(PlaceOrderCommand command) {
-        UUID idempotencyKey = command.idempotencyKey();
-        if (idempotencyKey != null) {
-            boolean acquired = idempotencyRepositoryPort.tryAcquire(idempotencyKey, IDEMPOTENCY_TTL);
-            if (!acquired) {
-                log.warn("[order] Rejecting duplicate order submission for idempotencyKey={}", idempotencyKey);
-                throw new DuplicateOrderException(idempotencyKey);
-            }
+        @Override
+        @Transactional
+        public OrderJpaEntity placeOrder(PlaceOrderCommand command) {
+                UUID idempotencyKey = command.idempotencyKey();
+                if (idempotencyKey != null) {
+                        boolean acquired = idempotencyRepositoryPort.tryAcquire(idempotencyKey, IDEMPOTENCY_TTL);
+                        if (!acquired) {
+                                log.warn("[order] Rejecting duplicate order submission for idempotencyKey={}",
+                                                idempotencyKey);
+                                throw new DuplicateOrderException(idempotencyKey);
+                        }
+                }
+
+                try {
+                        return executePlaceOrder(command);
+                } catch (RuntimeException ex) {
+                        if (idempotencyKey != null) {
+                                idempotencyRepositoryPort.release(idempotencyKey);
+                        }
+                        throw ex;
+                }
         }
 
-        try {
-            return executePlaceOrder(command);
-        } catch (RuntimeException ex) {
-            if (idempotencyKey != null) {
-                idempotencyRepositoryPort.release(idempotencyKey);
-            }
-            throw ex;
-        }
-    }
+        private OrderJpaEntity executePlaceOrder(PlaceOrderCommand command) {
+                Timer.Sample executionSample = tradingMetricsService.startOrderTimer();
+                log.info("[order] Placing order from command={}", command);
 
-    private OrderJpaEntity executePlaceOrder(PlaceOrderCommand command) {
-        Timer.Sample executionSample = tradingMetricsService.startOrderTimer();
-        log.info("[order] Placing order from command={}", command);
+                UserJpaEntity user = userRepositoryPort.findById(command.userId())
+                                .orElseThrow(() -> new ResourceNotFoundException("User", command.userId()));
 
-        UserJpaEntity user = userRepositoryPort.findById(command.userId())
-                .orElseThrow(() -> new ResourceNotFoundException("User", command.userId()));
+                InstrumentJpaEntity instrument = resolveInstrument(command);
 
-        InstrumentJpaEntity instrument = resolveInstrument(command);
+                Optional<MarketDataJpaEntity> latestMarketData = instrument.getType() == InstrumentType.MONEDA
+                                ? Optional.empty()
+                                : marketDataRepositoryPort.findLatestByInstrumentId(instrument.getId());
 
-        Optional<MarketDataJpaEntity> latestMarketData = instrument.getType() == InstrumentType.MONEDA
-                ? Optional.empty()
-                : marketDataRepositoryPort.findLatestByInstrumentId(instrument.getId());
+                List<OrderJpaEntity> filledOrders = orderRepositoryPort.findByUserIdAndStatus(command.userId(),
+                                OrderStatus.FILLED);
+                MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
+                int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledOrders,
+                                instrument.getId());
 
-        List<OrderJpaEntity> filledOrders = orderRepositoryPort.findByUserIdAndStatus(command.userId(), OrderStatus.FILLED);
-        MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
-        int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledOrders, instrument.getId());
+                OrderExecutionContext context = new OrderExecutionContext(
+                                command,
+                                user,
+                                instrument,
+                                latestMarketData,
+                                availableCash,
+                                availableShares);
 
-        OrderExecutionContext context = new OrderExecutionContext(
-                command,
-                user,
-                instrument,
-                latestMarketData,
-                availableCash,
-                availableShares
-        );
+                OrderExecutionStrategy strategy = executionStrategies.stream()
+                                .filter(s -> s.supports(context))
+                                .findFirst()
+                                .orElseThrow(() -> new BusinessRuleViolationException(
+                                                String.format("No execution strategy found for order type=%s, side=%s",
+                                                                command.type(), command.side())));
 
-        OrderExecutionStrategy strategy = executionStrategies.stream()
-                .filter(s -> s.supports(context))
-                .findFirst()
-                .orElseThrow(() -> new BusinessRuleViolationException(
-                        String.format("No execution strategy found for order type=%s, side=%s", command.type(), command.side())
-                ));
+                OrderJpaEntity evaluatedOrder = strategy.execute(context);
+                OrderJpaEntity savedOrder = orderRepositoryPort.save(evaluatedOrder);
 
-        OrderJpaEntity evaluatedOrder = strategy.execute(context);
-        OrderJpaEntity savedOrder = orderRepositoryPort.save(evaluatedOrder);
+                String status = savedOrder.getStatus().name();
+                String type = savedOrder.getType().name();
+                String side = savedOrder.getSide().name();
+                tradingMetricsService.recordOrderProcessed(status, type, side);
+                tradingMetricsService.stopOrderTimer(executionSample, status, type, side);
 
-        String status = savedOrder.getStatus().name();
-        String type = savedOrder.getType().name();
-        String side = savedOrder.getSide().name();
-        tradingMetricsService.recordOrderProcessed(status, type, side);
-        tradingMetricsService.stopOrderTimer(executionSample, status, type, side);
-
-        log.info("[order] Order processed and persisted: id={}, status={}, quantity={}, price={}, idempotencyKey={}",
-                savedOrder.getId(), savedOrder.getStatus(), savedOrder.getQuantity(), savedOrder.getPrice(), command.idempotencyKey());
-        return savedOrder;
-    }
-
-    private InstrumentJpaEntity resolveInstrument(PlaceOrderCommand command) {
-        if (command.side() != null && command.side().isCashOperation() && command.instrumentId() == null) {
-            String currencyTicker = command.amount() != null
-                    ? command.amount().currency()
-                    : MonetaryAmount.ARS_CURRENCY;
-            return instrumentRepositoryPort.findByTicker(currencyTicker)
-                    .orElseThrow(() -> new ResourceNotFoundException("Instrument", currencyTicker));
-        }
-        return instrumentRepositoryPort.findById(command.instrumentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instrument", command.instrumentId()));
-    }
-
-    @Override
-    @Transactional
-    public OrderJpaEntity cancelOrder(Long orderId) {
-        log.info("[order] Cancelling orderId={}", orderId);
-
-        OrderJpaEntity existingOrder = orderRepositoryPort.findById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
-
-        if (existingOrder.getStatus() != OrderStatus.NEW) {
-            throw new InvalidOrderStateException(
-                    orderId,
-                    existingOrder.getStatus(),
-                    String.format("Only orders with status NEW can be cancelled. Current status: %s", existingOrder.getStatus())
-            );
+                log.info("[order] Order processed and persisted: id={}, status={}, quantity={}, price={}, idempotencyKey={}",
+                                savedOrder.getId(), savedOrder.getStatus(), savedOrder.getQuantity(),
+                                savedOrder.getPrice(), command.idempotencyKey());
+                return savedOrder;
         }
 
-        existingOrder.setStatus(OrderStatus.CANCELLED);
-        OrderJpaEntity savedOrder = orderRepositoryPort.save(existingOrder);
+        private InstrumentJpaEntity resolveInstrument(PlaceOrderCommand command) {
+                if (command.side() != null && command.side().isCashOperation()) {
+                        String currencyTicker = (command.amount() != null && command.amount().currency() != null)
+                                        ? command.amount().currency()
+                                        : MonetaryAmount.ARS_CURRENCY;
+                        return instrumentRepositoryPort.findByTicker(currencyTicker)
+                                        .orElseThrow(() -> new ResourceNotFoundException("Instrument", currencyTicker));
+                }
+                return instrumentRepositoryPort.findById(command.instrumentId())
+                                .orElseThrow(() -> new ResourceNotFoundException("Instrument", command.instrumentId()));
+        }
 
-        tradingMetricsService.recordOrderProcessed(
-                savedOrder.getStatus().name(),
-                savedOrder.getType().name(),
-                savedOrder.getSide().name()
-        );
+        @Override
+        @Transactional
+        public OrderJpaEntity cancelOrder(Long orderId) {
+                log.info("[order] Cancelling orderId={}", orderId);
 
-        log.info("[order] Cancelled orderId={}", savedOrder.getId());
-        return savedOrder;
-    }
+                OrderJpaEntity existingOrder = orderRepositoryPort.findById(orderId)
+                                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+
+                if (existingOrder.getStatus() != OrderStatus.NEW) {
+                        throw new InvalidOrderStateException(
+                                        orderId,
+                                        existingOrder.getStatus(),
+                                        String.format("Only orders with status NEW can be cancelled. Current status: %s",
+                                                        existingOrder.getStatus()));
+                }
+
+                existingOrder.setStatus(OrderStatus.CANCELLED);
+                OrderJpaEntity savedOrder = orderRepositoryPort.save(existingOrder);
+
+                tradingMetricsService.recordOrderProcessed(
+                                savedOrder.getStatus().name(),
+                                savedOrder.getType().name(),
+                                savedOrder.getSide().name());
+
+                log.info("[order] Cancelled orderId={}", savedOrder.getId());
+                return savedOrder;
+        }
 }

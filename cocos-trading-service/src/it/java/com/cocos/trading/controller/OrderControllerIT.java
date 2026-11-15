@@ -394,9 +394,9 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Business Rule Violation"));
 
-        // 3. Invalid CASH_IN payload attempting to send 'quantity' instead of 'amount' -> 400 Bad Request
+        // 3. Invalid CASH_IN payload attempting to send 'quantity' (unknown field on TransferOrderRequestApi) -> 400 Bad Request
         String invalidCashTransferJsonWithQuantity = String.format(
-                "{\"userId\":%d,\"side\":\"CASH_IN\",\"quantity\":50000}",
+                "{\"userId\":%d,\"side\":\"CASH_IN\",\"amount\":{\"amount\":50000.00,\"currency\":\"ARS\"},\"quantity\":50000}",
                 savedUser.getId()
         );
 
@@ -405,7 +405,8 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidCashTransferJsonWithQuantity))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Bad Request"));
+                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.parameters.field").value("quantity"));
 
         // 4. Invalid CASH_IN payload missing 'amount' -> 400 Bad Request
         OrderCreateRequestApi missingAmountTransfer = new TransferOrderRequestApi(

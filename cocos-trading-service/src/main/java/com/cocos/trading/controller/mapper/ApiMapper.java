@@ -35,18 +35,20 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Utility mapper converting between polymorphic API contract DTOs (`*Api`), application commands/models, and JPA entities.
+ * Utility mapper converting between API contract DTOs (`*Api`), application
+ * commands/models, and JPA entities.
  */
 public final class ApiMapper {
 
-    private static final DateTimeFormatter ISO_DATETIME_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter ISO_DATETIME_FORMATTER = DateTimeFormatter
+            .ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     private ApiMapper() {
     }
 
     /**
-     * Converts an {@link InstrumentSearchFilterRequestApi} to an {@link InstrumentSearchQuery}.
+     * Converts an {@link InstrumentSearchFilterRequestApi} to an
+     * {@link InstrumentSearchQuery}.
      *
      * @param filter The API search filter.
      * @return The application {@link InstrumentSearchQuery}.
@@ -63,31 +65,31 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a polymorphic {@link OrderCreateRequestApi} ({@link TradeOrderRequestApi} or {@link TransferOrderRequestApi})
-     * and {@code Idempotency-Key} UUID to a {@link PlaceOrderCommand} using Java 21 exhaustive pattern matching.
+     * Converts an {@link OrderCreateRequestApi} and {@code Idempotency-Key} UUID to
+     * a {@link PlaceOrderCommand}.
      *
      * @param idempotencyKey Mandatory UUID idempotency key from the request header.
-     * @param request        The polymorphic API order creation request.
+     * @param request        The API order creation request.
      * @return The application {@link PlaceOrderCommand}.
      */
     public static PlaceOrderCommand toCommand(UUID idempotencyKey, OrderCreateRequestApi request) {
         return switch (request) {
-            case TradeOrderRequestApi trade -> PlaceOrderCommand.builder()
+            case TradeOrderRequestApi tradeRequest -> PlaceOrderCommand.builder()
                     .idempotencyKey(idempotencyKey)
-                    .userId(trade.userId())
-                    .instrumentId(trade.instrumentId())
-                    .side(OrderSide.valueOf(trade.side().name()))
-                    .type(OrderType.valueOf(trade.type().name()))
-                    .quantity(trade.quantity())
-                    .amount(toDomainMonetaryAmount(trade.amount()))
-                    .price(toDomainMonetaryAmount(trade.price()))
+                    .userId(tradeRequest.userId())
+                    .instrumentId(tradeRequest.instrumentId())
+                    .side(OrderSide.valueOf(tradeRequest.side().name()))
+                    .type(OrderType.valueOf(tradeRequest.type().name()))
+                    .quantity(tradeRequest.quantity())
+                    .amount(toDomainMonetaryAmount(tradeRequest.amount()))
+                    .price(toDomainMonetaryAmount(tradeRequest.price()))
                     .build();
-            case TransferOrderRequestApi transfer -> PlaceOrderCommand.builder()
+            case TransferOrderRequestApi transferRequest -> PlaceOrderCommand.builder()
                     .idempotencyKey(idempotencyKey)
-                    .userId(transfer.userId())
-                    .side(OrderSide.valueOf(transfer.side().name()))
+                    .userId(transferRequest.userId())
+                    .side(OrderSide.valueOf(transferRequest.side().name()))
                     .type(OrderType.MARKET)
-                    .amount(toDomainMonetaryAmount(transfer.amount()))
+                    .amount(toDomainMonetaryAmount(transferRequest.amount()))
                     .build();
         };
     }
@@ -103,7 +105,8 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a {@link Portfolio} to a {@link PortfolioApi}, grouping user metadata under {@code user}
+     * Converts a {@link Portfolio} to a {@link PortfolioApi}, grouping user
+     * metadata under {@code user}
      * and instrument metadata under each position's {@code instrument}.
      *
      * @param portfolio The portfolio valuation read-model.
@@ -158,29 +161,19 @@ public final class ApiMapper {
     }
 
     /**
-     * Converts a polymorphic {@link OrderJpaEntity} directly to its matching {@link OrderApi} subtype using Java 21 pattern matching:
-     * <ul>
-     *   <li>{@link TradeOrderJpaEntity} ({@code BUY}/{@code SELL}) &rarr; {@link TradeOrderApi} (populates {@code quantity} and {@code price}).</li>
-     *   <li>{@link TransferOrderJpaEntity} ({@code CASH_IN}/{@code CASH_OUT}) &rarr; {@link TransferOrderApi} (populates {@code amount}).</li>
-     * </ul>
+     * Converts an {@link OrderJpaEntity} directly to an {@link OrderApi},
+     * populating the nested {@link UserSummaryApi}
+     * and {@link InstrumentSummaryApi} objects for semantic symmetry with
+     * {@link PortfolioApi}.
      *
      * @param order The persisted {@link OrderJpaEntity}.
-     * @return The polymorphic {@link OrderApi} response DTO ({@link TradeOrderApi} or {@link TransferOrderApi}).
+     * @return The {@link OrderApi} response DTO.
      */
     public static OrderApi toApi(OrderJpaEntity order) {
         String formattedDatetime = order.getDatetime() != null
                 ? order.getDatetime().format(ISO_DATETIME_FORMATTER)
                 : null;
-
         return switch (order) {
-            case TransferOrderJpaEntity transferOrder -> TransferOrderApi.builder()
-                    .id(transferOrder.getId())
-                    .user(toUserSummaryApi(transferOrder.getUser()))
-                    .amount(toContractMonetaryAmount(AccountLedgerCalculator.calculateTotalAmount(transferOrder)))
-                    .side(OrderSideApi.valueOf(transferOrder.getSide().name()))
-                    .status(OrderStatusApi.valueOf(transferOrder.getStatus().name()))
-                    .datetime(formattedDatetime)
-                    .build();
             case TradeOrderJpaEntity tradeOrder -> TradeOrderApi.builder()
                     .id(tradeOrder.getId())
                     .user(toUserSummaryApi(tradeOrder.getUser()))
@@ -194,7 +187,15 @@ public final class ApiMapper {
                     .status(OrderStatusApi.valueOf(tradeOrder.getStatus().name()))
                     .datetime(formattedDatetime)
                     .build();
-            default -> throw new IllegalStateException("Unsupported OrderJpaEntity subtype: " + order.getClass().getName());
+            case TransferOrderJpaEntity transferOrder -> TransferOrderApi.builder()
+                    .id(transferOrder.getId())
+                    .user(toUserSummaryApi(transferOrder.getUser()))
+                    .amount(toContractMonetaryAmount(AccountLedgerCalculator.calculateTotalAmount(transferOrder)))
+                    .side(OrderSideApi.valueOf(transferOrder.getSide().name()))
+                    .status(OrderStatusApi.valueOf(transferOrder.getStatus().name()))
+                    .datetime(formattedDatetime)
+                    .build();
+            default -> throw new IllegalArgumentException("Unsupported OrderJpaEntity subtype: " + order.getClass().getName());
         };
     }
 

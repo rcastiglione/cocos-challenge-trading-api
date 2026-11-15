@@ -6,6 +6,9 @@ spring:
     name: cocos-trading-service
   profiles:
     default: local
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}

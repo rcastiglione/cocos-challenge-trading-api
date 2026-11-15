@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Cocos Capital Trading Engine API",
-    "description": "Postman Collection for the Cocos Challenge Transactional Trading Engine API (Portfolio Valuation & Order Routing with Money Pattern, Semantic Entity Grouping for user & instrument, and Idempotent MARKET/LIMIT Order Execution).",
+    "description": "Comprehensive Postman Collection & Living Documentation for the Cocos Challenge Transactional Trading Engine API.\n\n### Architecture & Contract Highlights\n1. **Polymorphic Order Contract (`OrderCreateRequestApi` / `OrderApi`)**:\n   - **Trade Orders (`BUY` / `SELL` -> `TradeOrderRequestApi` & `TradeOrderApi`)**: Requires `userId`, `instrumentId`, `side`, `type` (`MARKET` | `LIMIT`), and mutually exclusive sizing via `quantity` (whole shares) or `amount` (`MonetaryAmount` in ARS), plus target `price` (`MonetaryAmount`) for `LIMIT` orders. Returns `user`, `instrument`, `quantity`, `price`, `type`, `side`, `status`, and `datetime`.\n   - **Cash Transfers (`CASH_IN` / `CASH_OUT` -> `TransferOrderRequestApi` & `TransferOrderApi`)**: Requires only `userId`, `side`, and `amount` (`MonetaryAmount` with `currency: \"ARS\"`). Automatically resolves the underlying `MONEDA` instrument (`ARS`, `id=66`) and returns `id`, `user`, `amount`, `side`, `status` (`FILLED`), and `datetime` (omitting `instrument`, `type`, `quantity`, and `price`).\n2. **Money Pattern (`MonetaryAmount`) & Semantic Entity Grouping**: All monetary values use `{ \"amount\": 925.85, \"currency\": \"ARS\" }`; user and instrument references are grouped under `user: { id, accountNumber }` and `instrument: { id, ticker }`.\n3. **Idempotency & Distributed Locking**: `POST /orders` enforces a mandatory `Idempotency-Key` UUID header backed by Redis (`SET ... NX EX 86400`, 24h TTL).\n4. **Standardized RFC 7807 Problem Details**: Validation and business rule errors follow RFC 7807 (`BadRequestProblem` 400, `ResourceNotFoundProblem` 404, `BusinessRuleViolationProblem` 409).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,118 +13,193 @@
   ],
   "item": [
     {
-      "name": "1. Get User Portfolio",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/portfolios/1",
-          "host": ["{{baseUrl}}"],
-          "path": ["portfolios", "1"]
-        },
-        "description": "Retrieves the user's portfolio with semantic grouping of user ({id, accountNumber}) and position instrument ({id, ticker}), alongside MonetaryAmount ({amount, currency: 'ARS'}) valuations."
-      },
-      "response": [
+      "name": "1. Portfolios & Instruments",
+      "description": "Read-only endpoints for real-time portfolio valuation (using Weighted Average Cost - WAC, Money Pattern, and Semantic Entity Grouping) and market instrument search.",
+      "item": [
         {
-          "name": "200 OK — Portfolio Valuation (Money Pattern & Semantic Entity Grouping)",
-          "originalRequest": {
+          "name": "1.1 Get User Portfolio",
+          "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/portfolios/1",
-              "host": ["{{baseUrl}}"],
-              "path": ["portfolios", "1"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "portfolios",
+                "1"
+              ]
+            },
+            "description": "Retrieves the user's portfolio valuation (`PortfolioApi`) with semantic grouping of `user` (`{id, accountNumber}`) and each position's `instrument` (`{id, ticker}`), alongside `MonetaryAmount` (`{amount, currency: 'ARS'}`) valuations and WAC-based return percentages."
           },
-          "status": "OK",
-          "code": 200,
-          "_postman_previewlanguage": "json",
-          "header": [
+          "response": [
             {
-              "key": "Content-Type",
-              "value": "application/json"
+              "name": "200 OK — Portfolio Valuation (Money Pattern & Semantic Entity Grouping)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/portfolios/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "portfolios",
+                    "1"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"totalAccountValue\": {\n    \"amount\": 936222.00,\n    \"currency\": \"ARS\"\n  },\n  \"availableCash\": {\n    \"amount\": 691350.00,\n    \"currency\": \"ARS\"\n  },\n  \"positions\": [\n    {\n      \"instrument\": {\n        \"id\": 31,\n        \"ticker\": \"BMA\"\n      },\n      \"quantity\": 10,\n      \"lastPrice\": {\n        \"amount\": 1502.80,\n        \"currency\": \"ARS\"\n      },\n      \"marketValue\": {\n        \"amount\": 15028.00,\n        \"currency\": \"ARS\"\n      },\n      \"totalReturnPercentage\": -2.42,\n      \"dailyReturnPercentage\": -1.15\n    },\n    {\n      \"instrument\": {\n        \"id\": 47,\n        \"ticker\": \"PAMP\"\n      },\n      \"quantity\": 40,\n      \"lastPrice\": {\n        \"amount\": 925.85,\n        \"currency\": \"ARS\"\n      },\n      \"marketValue\": {\n        \"amount\": 37034.00,\n        \"currency\": \"ARS\"\n      },\n      \"totalReturnPercentage\": -0.45,\n      \"dailyReturnPercentage\": 0.44\n    },\n    {\n      \"instrument\": {\n        \"id\": 54,\n        \"ticker\": \"METR\"\n      },\n      \"quantity\": 500,\n      \"lastPrice\": {\n        \"amount\": 229.50,\n        \"currency\": \"ARS\"\n      },\n      \"marketValue\": {\n        \"amount\": 114750.00,\n        \"currency\": \"ARS\"\n      },\n      \"totalReturnPercentage\": -8.20,\n      \"dailyReturnPercentage\": -1.08\n    }\n  ]\n}"
             }
-          ],
-          "body": "{\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"totalAccountValue\": { \"amount\": 1697459.88, \"currency\": \"ARS\" },\n  \"availableCash\": { \"amount\": 1286738.70, \"currency\": \"ARS\" },\n  \"positions\": [\n    {\n      \"instrument\": {\n        \"id\": 47,\n        \"ticker\": \"PAMP\"\n      },\n      \"quantity\": 298,\n      \"lastPrice\": { \"amount\": 925.85, \"currency\": \"ARS\" },\n      \"marketValue\": { \"amount\": 275903.30, \"currency\": \"ARS\" },\n      \"totalReturnPercentage\": 2.15,\n      \"dailyReturnPercentage\": 1.55\n    }\n  ]\n}"
+          ]
+        },
+        {
+          "name": "1.2 Search Instruments — General Query",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/instruments?query=PAMP",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "PAMP"
+                }
+              ]
+            },
+            "description": "Searches instruments matching `ticker` or `name` (case-insensitive substring match), returning `lastPrice` and `previousClose` as `MonetaryAmount` (`{amount, currency: 'ARS'}`) and `dailyReturnPercentage`."
+          },
+          "response": [
+            {
+              "name": "200 OK — Matching Instruments for Query 'PAMP'",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/instruments?query=PAMP",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "instruments"
+                  ],
+                  "query": [
+                    {
+                      "key": "query",
+                      "value": "PAMP"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 47,\n    \"ticker\": \"PAMP\",\n    \"name\": \"Pampa Holding S.A.\",\n    \"type\": \"ACCIONES\",\n    \"lastPrice\": {\n      \"amount\": 925.85,\n      \"currency\": \"ARS\"\n    },\n    \"previousClose\": {\n      \"amount\": 921.80,\n      \"currency\": \"ARS\"\n    },\n    \"dailyReturnPercentage\": 0.44\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "1.3 Search Instruments — By Ticker & Name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "MOLI"
+                },
+                {
+                  "key": "name",
+                  "value": "Molinos"
+                }
+              ]
+            },
+            "description": "Searches instruments using specific `ticker` and `name` query parameters simultaneously."
+          },
+          "response": [
+            {
+              "name": "200 OK — Matching Instruments by Ticker & Name",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "instruments"
+                  ],
+                  "query": [
+                    {
+                      "key": "ticker",
+                      "value": "MOLI"
+                    },
+                    {
+                      "key": "name",
+                      "value": "Molinos"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 42,\n    \"ticker\": \"MOLI\",\n    \"name\": \"Molinos Río de la Plata\",\n    \"type\": \"ACCIONES\",\n    \"lastPrice\": {\n      \"amount\": 648.50,\n      \"currency\": \"ARS\"\n    },\n    \"previousClose\": {\n      \"amount\": 657.50,\n      \"currency\": \"ARS\"\n    },\n    \"dailyReturnPercentage\": -1.37\n  }\n]"
+            }
+          ]
         }
       ]
     },
     {
-      "name": "2. Search Instruments (General Query)",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/instruments?query=PAMP",
-          "host": ["{{baseUrl}}"],
-          "path": ["instruments"],
-          "query": [
-            {
-              "key": "query",
-              "value": "PAMP"
-            }
-          ]
-        },
-        "description": "Searches instruments matching ticker or name (case-insensitive substring match), returning lastPrice and previousClose as MonetaryAmount ({amount, currency: 'ARS'})."
-      }
-    },
-    {
-      "name": "3. Search Instruments (By Ticker & Name)",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos",
-          "host": ["{{baseUrl}}"],
-          "path": ["instruments"],
-          "query": [
-            {
-              "key": "ticker",
-              "value": "MOLI"
-            },
-            {
-              "key": "name",
-              "value": "Molinos"
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "4. Submit MARKET BUY Order (By Exact Share Quantity)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Idempotency-Key",
-            "value": "{{$guid}}",
-            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/orders",
-          "host": ["{{baseUrl}}"],
-          "path": ["orders"]
-        },
-        "description": "Places a MARKET BUY order for an exact number of shares using the latest close price. Transitions immediately to FILLED (or REJECTED if insufficient funds) and returns nested user ({id, accountNumber}), instrument ({id, ticker}), and price as MonetaryAmount."
-      },
-      "response": [
+      "name": "2. Trade Orders (Market & Limit)",
+      "description": "Equity trading operations (`BUY` and `SELL` on `ACCIONES` instruments) using the polymorphic `TradeOrderRequestApi` contract and returning `TradeOrderApi` (`user`, `instrument`, `quantity`, `price`, `type`, `side`, `status`, `datetime`).",
+      "item": [
         {
-          "name": "201 Created — MARKET BUY Order (By Exact Share Quantity)",
-          "originalRequest": {
+          "name": "2.1 Submit MARKET BUY Order — By Exact Share Quantity",
+          "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Idempotency-Key",
-                "value": "550e8400-e29b-41d4-a716-446655440001"
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
               },
               {
                 "key": "Content-Type",
@@ -137,58 +212,66 @@
             },
             "url": {
               "raw": "{{baseUrl}}/orders",
-              "host": ["{{baseUrl}}"],
-              "path": ["orders"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Places a `MARKET BUY` order (`TradeOrderRequestApi`) for an exact `quantity` of whole shares (`10` shares of `PAMP`, `instrumentId=47`) executed at the latest market close price (`925.85 ARS`). Transitions immediately to `FILLED` when `availableCash` is sufficient and returns `TradeOrderApi`."
           },
-          "status": "Created",
-          "code": 201,
-          "_postman_previewlanguage": "json",
-          "header": [
+          "response": [
             {
-              "key": "Content-Type",
-              "value": "application/json"
+              "name": "201 Created — MARKET BUY Order (By Exact Share Quantity)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440001"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 12,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00\"\n}"
             }
-          ],
-          "body": "{\n  \"id\": 12,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00\"\n}"
-        }
-      ]
-    },
-    {
-      "name": "5. Submit MARKET BUY Order (By Total ARS Investment Amount)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Idempotency-Key",
-            "value": "{{$guid}}",
-            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"amount\": {\n    \"amount\": 15000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+          ]
         },
-        "url": {
-          "raw": "{{baseUrl}}/orders",
-          "host": ["{{baseUrl}}"],
-          "path": ["orders"]
-        },
-        "description": "Places a MARKET BUY order by total ARS MonetaryAmount, automatically calculating the maximum whole shares (floor(amount / closePrice)) and returning nested user and instrument summary objects."
-      },
-      "response": [
         {
-          "name": "201 Created — MARKET BUY Order (By Total ARS Investment Amount)",
-          "originalRequest": {
+          "name": "2.2 Submit MARKET BUY Order — By Total ARS Investment Amount",
+          "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Idempotency-Key",
-                "value": "550e8400-e29b-41d4-a716-446655440002"
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
               },
               {
                 "key": "Content-Type",
@@ -201,58 +284,138 @@
             },
             "url": {
               "raw": "{{baseUrl}}/orders",
-              "host": ["{{baseUrl}}"],
-              "path": ["orders"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Places a `MARKET BUY` order (`TradeOrderRequestApi`) sized by total investment `amount` (`15,000.00 ARS`). The engine automatically calculates the maximum whole shares (`floor(15000.00 / 925.85) = 16` shares, zero fractional shares) and returns `TradeOrderApi` with `quantity: 16` and `price: { amount: 925.85, currency: 'ARS' }` (omitting `amount`)."
           },
-          "status": "Created",
-          "code": 201,
-          "_postman_previewlanguage": "json",
-          "header": [
+          "response": [
             {
-              "key": "Content-Type",
-              "value": "application/json"
+              "name": "201 Created — MARKET BUY Order (By Total ARS Investment Amount)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440002"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"amount\": {\n    \"amount\": 15000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 13,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 16,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:00\"\n}"
             }
-          ],
-          "body": "{\n  \"id\": 13,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 16,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:00\"\n}"
-        }
-      ]
-    },
-    {
-      "name": "6. Submit LIMIT BUY Order",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Idempotency-Key",
-            "value": "{{$guid}}",
-            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  }\n}"
+          ]
         },
-        "url": {
-          "raw": "{{baseUrl}}/orders",
-          "host": ["{{baseUrl}}"],
-          "path": ["orders"]
-        },
-        "description": "Places a LIMIT BUY order with a target MonetaryAmount price ({amount, currency: 'ARS'}). Stored in status NEW if funds are sufficient and returns nested user and instrument summary objects."
-      },
-      "response": [
         {
-          "name": "201 Created — LIMIT BUY Order (Status NEW)",
-          "originalRequest": {
+          "name": "2.3 Submit MARKET SELL Order — By Exact Share Quantity",
+          "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Idempotency-Key",
-                "value": "550e8400-e29b-41d4-a716-446655440003"
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Places a `MARKET SELL` order (`TradeOrderRequestApi`) for `5` shares of `PAMP` (`instrumentId=47`). Validates that the user holds at least `5` available shares and transitions immediately to `FILLED`."
+          },
+          "response": [
+            {
+              "name": "201 Created — MARKET SELL Order (Status FILLED)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440006"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 5\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 14,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"SELL\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:30\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "2.4 Submit LIMIT BUY Order — Pending Status NEW",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
               },
               {
                 "key": "Content-Type",
@@ -265,95 +428,121 @@
             },
             "url": {
               "raw": "{{baseUrl}}/orders",
-              "host": ["{{baseUrl}}"],
-              "path": ["orders"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Places a `LIMIT BUY` order (`TradeOrderRequestApi`) with a target unit `price` (`900.00 ARS`). Stored with status `NEW` when buying power is sufficient and returns `TradeOrderApi`."
           },
-          "status": "Created",
-          "code": 201,
-          "_postman_previewlanguage": "json",
-          "header": [
+          "response": [
             {
-              "key": "Content-Type",
-              "value": "application/json"
+              "name": "201 Created — LIMIT BUY Order (Status NEW)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440003"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 105,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"NEW\",\n  \"datetime\": \"2024-06-15T14:32:00\"\n}"
             }
-          ],
-          "body": "{\n  \"id\": 105,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"NEW\",\n  \"datetime\": \"2024-06-15T14:32:00\"\n}"
-        }
-      ]
-    },
-    {
-      "name": "7. Cancel Pending (NEW) Order",
-      "request": {
-        "method": "POST",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/orders/105/cancel",
-          "host": ["{{baseUrl}}"],
-          "path": ["orders", "105", "cancel"]
+          ]
         },
-        "description": "Cancels an order currently in NEW status, transitioning it to CANCELLED and returning the updated OrderApi with nested user and instrument objects."
-      },
-      "response": [
         {
-          "name": "200 OK — Order Cancelled",
-          "originalRequest": {
+          "name": "2.5 Cancel Pending (NEW) Order",
+          "request": {
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/orders/105/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["orders", "105", "cancel"]
-            }
+              "raw": "{{baseUrl}}/orders/5/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "5",
+                "cancel"
+              ]
+            },
+            "description": "Cancels an order currently in `NEW` status (e.g., seeded `orderId=5` on `LOMA`), transitioning it to `CANCELLED` and returning the updated `TradeOrderApi`."
           },
-          "status": "OK",
-          "code": 200,
-          "_postman_previewlanguage": "json",
-          "header": [
+          "response": [
             {
-              "key": "Content-Type",
-              "value": "application/json"
+              "name": "200 OK — Order Cancelled",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/5/cancel",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "5",
+                    "cancel"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 5,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 45,\n    \"ticker\": \"LOMA\"\n  },\n  \"quantity\": 50,\n  \"price\": {\n    \"amount\": 710.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2023-07-12T15:14:20\"\n}"
             }
-          ],
-          "body": "{\n  \"id\": 105,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2024-06-15T14:32:00\"\n}"
+          ]
         }
       ]
     },
     {
-      "name": "8. Submit CASH_IN Transfer",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Idempotency-Key",
-            "value": "{{$guid}}",
-            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  }\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/orders",
-          "host": ["{{baseUrl}}"],
-          "path": ["orders"]
-        },
-        "description": "Deposits ARS into the user's account via the polymorphic TransferOrderRequestApi (requires only 'userId', 'side', and 'amount'; resolves the ARS MONEDA instrument internally from amount.currency) and returns TransferOrderApi with nested user, amount, and status=FILLED (omitting instrument, type, quantity, and price)."
-      },
-      "response": [
+      "name": "3. Cash Transfers (Deposits & Withdrawals)",
+      "description": "Direct fiduciary cash movements (`CASH_IN` and `CASH_OUT`) using the simplified polymorphic `TransferOrderRequestApi` contract (`userId`, `side`, `amount`) and returning `TransferOrderApi` (`id`, `user`, `amount`, `side`, `status`, `datetime` — omitting `instrument`, `type`, `quantity`, and `price`).",
+      "item": [
         {
-          "name": "201 Created — CASH_IN Transfer",
-          "originalRequest": {
+          "name": "3.1 Submit CASH_IN Transfer — ARS Deposit",
+          "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Idempotency-Key",
-                "value": "550e8400-e29b-41d4-a716-446655440004"
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
               },
               {
                 "key": "Content-Type",
@@ -366,58 +555,66 @@
             },
             "url": {
               "raw": "{{baseUrl}}/orders",
-              "host": ["{{baseUrl}}"],
-              "path": ["orders"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Deposits ARS into the user's trading account via the polymorphic `TransferOrderRequestApi` (requires only `userId`, `side`, and `amount`; resolves the `ARS` `MONEDA` instrument internally from `amount.currency`) and returns `TransferOrderApi` with `status: 'FILLED'` (omitting `instrument`, `type`, `quantity`, and `price`)."
           },
-          "status": "Created",
-          "code": 201,
-          "_postman_previewlanguage": "json",
-          "header": [
+          "response": [
             {
-              "key": "Content-Type",
-              "value": "application/json"
+              "name": "201 Created — CASH_IN Transfer (Status FILLED)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440004"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 15,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_IN\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:35:00\"\n}"
             }
-          ],
-          "body": "{\n  \"id\": 15,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_IN\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:35:00\"\n}"
-        }
-      ]
-    },
-    {
-      "name": "9. Submit CASH_OUT Transfer",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Idempotency-Key",
-            "value": "{{$guid}}",
-            "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
-          },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_OUT\",\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+          ]
         },
-        "url": {
-          "raw": "{{baseUrl}}/orders",
-          "host": ["{{baseUrl}}"],
-          "path": ["orders"]
-        },
-        "description": "Withdraws ARS from the user's account via the polymorphic TransferOrderRequestApi (requires only 'userId', 'side', and 'amount'; resolves the ARS MONEDA instrument internally from amount.currency and validates availableCash) and returns TransferOrderApi with nested user, amount, and status=FILLED (omitting instrument, type, quantity, and price)."
-      },
-      "response": [
         {
-          "name": "201 Created — CASH_OUT Transfer",
-          "originalRequest": {
+          "name": "3.2 Submit CASH_OUT Transfer — ARS Withdrawal",
+          "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Idempotency-Key",
-                "value": "550e8400-e29b-41d4-a716-446655440005"
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key (24h TTL in Redis)"
               },
               {
                 "key": "Content-Type",
@@ -430,49 +627,640 @@
             },
             "url": {
               "raw": "{{baseUrl}}/orders",
-              "host": ["{{baseUrl}}"],
-              "path": ["orders"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Withdraws ARS from the user's trading account via the polymorphic `TransferOrderRequestApi` (requires only `userId`, `side`, and `amount`; resolves the `ARS` `MONEDA` instrument internally from `amount.currency` and validates `availableCash`) and returns `TransferOrderApi` with `status: 'FILLED'`."
           },
-          "status": "Created",
-          "code": 201,
-          "_postman_previewlanguage": "json",
-          "header": [
+          "response": [
             {
-              "key": "Content-Type",
-              "value": "application/json"
+              "name": "201 Created — CASH_OUT Transfer (Status FILLED)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440005"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_OUT\",\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 16,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_OUT\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:36:00\"\n}"
             }
-          ],
-          "body": "{\n  \"id\": 16,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_OUT\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:36:00\"\n}"
+          ]
         }
       ]
     },
     {
-      "name": "Fail: Duplicate Order (Idempotency test)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Idempotency-Key",
-            "value": "123e4567-e89b-12d3-a456-426614174000",
-            "description": "Hardcoded static UUID to test idempotency rejection (send twice to trigger 409 Conflict)"
+      "name": "4. Validation & Edge Cases (Sad Paths)",
+      "description": "Comprehensive negative test suite covering `OrderCreateRequestValidator`, Jackson strict polymorphic deserialization (`@JsonIgnoreProperties(ignoreUnknown = false)`), insufficient funds/holdings handling (`409 Conflict` vs `REJECTED` status), and Redis idempotency protection.",
+      "item": [
+        {
+          "name": "4.1 Transfer — Unsupported Currency USD (400 Bad Request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 1000.00,\n    \"currency\": \"USD\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Tests `OrderCreateRequestValidator` when a `CASH_IN` transfer specifies an unsupported currency (`amount.currency = \"USD\"`). Returns `400 Bad Request` (`BadRequestProblem` under RFC 7807) explaining that `amount.currency is required and must be 'ARS'.`"
           },
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
+          "response": [
+            {
+              "name": "400 Bad Request — Unsupported Currency (Only ARS Supported)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440011"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 1000.00,\n    \"currency\": \"USD\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Validation failed: amount.currency is required and must be 'ARS'.\",\n  \"parameters\": {\n    \"amount\": \"amount.currency is required and must be 'ARS'.\"\n  }\n}"
+            }
+          ]
         },
-        "url": {
-          "raw": "{{baseUrl}}/orders",
-          "host": ["{{baseUrl}}"],
-          "path": ["orders"]
+        {
+          "name": "4.2 Transfer — Invalid Unknown Field 'quantity' or 'price' (400 Bad Request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  },\n  \"quantity\": 100,\n  \"price\": {\n    \"amount\": 1.00,\n    \"currency\": \"ARS\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Tests strict polymorphic deserialization on `TransferOrderRequestApi` (`@JsonIgnoreProperties(ignoreUnknown = false)`). Sending equity trade fields like `quantity` or `price` inside a `CASH_IN` request triggers `400 Bad Request` (`UnrecognizedPropertyException`)."
+          },
+          "response": [
+            {
+              "name": "400 Bad Request — Unrecognized Field in TransferOrderRequestApi",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440012"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_IN\",\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  },\n  \"quantity\": 100,\n  \"price\": {\n    \"amount\": 1.00,\n    \"currency\": \"ARS\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Unrecognized field 'quantity' is not allowed for this request type.\",\n  \"parameters\": {\n    \"field\": \"quantity\"\n  }\n}"
+            }
+          ]
         },
-        "description": "Uses a static Idempotency-Key UUID (123e4567-e89b-12d3-a456-426614174000). Click 'Send' once to create the order (201 Created), then click 'Send' a second time to verify the 409 Conflict (Duplicate Order) idempotency protection."
-      }
+        {
+          "name": "4.3 Market Trade — Ambiguous Sizing: Both 'quantity' and 'amount' (400 Bad Request — XOR Violation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"amount\": {\n    \"amount\": 15000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Tests `OrderCreateRequestValidator` when a `MARKET BUY` request sends both `quantity` and `amount` simultaneously (XOR violation). Returns `400 Bad Request` with `Provide either quantity or amount, not both.`"
+          },
+          "response": [
+            {
+              "name": "400 Bad Request — Ambiguous Sizing (XOR Violation)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440013"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"amount\": {\n    \"amount\": 15000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Validation failed: Provide either quantity or amount, not both.\",\n  \"parameters\": {\n    \"quantity\": \"Provide either quantity or amount, not both.\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "4.4 Limit Trade — Missing Target 'price' (400 Bad Request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Tests `OrderCreateRequestValidator` when a `LIMIT BUY` order sends `quantity` but omits the mandatory `price` field. Returns `400 Bad Request` (`price is required for LIMIT orders.`)."
+          },
+          "response": [
+            {
+              "name": "400 Bad Request — Missing Price in LIMIT Order",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440014"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Validation failed: price is required for LIMIT orders.\",\n  \"parameters\": {\n    \"price\": \"price is required for LIMIT orders.\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "4.5 Cash Out — Insufficient Available Cash (409 Conflict / Business Rule Violation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_OUT\",\n  \"amount\": {\n    \"amount\": 99000000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Tests `CashTransferExecutionStrategy` when a `CASH_OUT` withdrawal exceeds the user's `availableCash` balance. Throws `BusinessRuleViolationException` (mapped to `409 Conflict` / `BusinessRuleViolationProblem` under RFC 7807) without persisting an invalid fiduciary withdrawal."
+          },
+          "response": [
+            {
+              "name": "409 Conflict — Insufficient Available Cash for CASH_OUT",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440015"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"side\": \"CASH_OUT\",\n  \"amount\": {\n    \"amount\": 99000000.00,\n    \"currency\": \"ARS\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/business-rule-violation/409\",\n  \"title\": \"Business Rule Violation\",\n  \"status\": 409,\n  \"detail\": \"Insufficient available cash for CASH_OUT transfer: requested=99000000.00 ARS, available=691350.00 ARS.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "4.6 Market Sell — Insufficient Share Holdings (201 Created — Order Status REJECTED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Places a `MARKET SELL` order that exceeds the user's current share position (`quantity: 50000` > `40` held shares of `PAMP`). Per the trading engine specification, equity orders with insufficient holdings or buying power are persisted in the ledger with `status: 'REJECTED'` for auditability and returned with `201 Created`."
+          },
+          "response": [
+            {
+              "name": "201 Created — MARKET SELL Persisted with Status REJECTED",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440016"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 18,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"SELL\",\n  \"status\": \"REJECTED\",\n  \"datetime\": \"2024-06-15T14:40:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "4.7 Market Buy — Insufficient Buying Power (201 Created — Order Status REJECTED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Mandatory UUID v4 idempotency key"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Places a `MARKET BUY` order whose total cost (`50,000 * 925.85 = 46,292,500.00 ARS`) exceeds the user's `availableCash`. The order is evaluated, persisted with `status: 'REJECTED'` for audit traceability, and returned in `TradeOrderApi`."
+          },
+          "response": [
+            {
+              "name": "201 Created — MARKET BUY Persisted with Status REJECTED",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "550e8400-e29b-41d4-a716-446655440017"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50000\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 19,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"REJECTED\",\n  \"datetime\": \"2024-06-15T14:41:00\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "4.8 Idempotency — Duplicate Order Retry with Static Key (409 Conflict — Duplicate Order)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "123e4567-e89b-12d3-a456-426614174000",
+                "description": "Hardcoded static UUID to test idempotency rejection (send twice to trigger 409 Conflict)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Uses a static `Idempotency-Key` UUID (`123e4567-e89b-12d3-a456-426614174000`). Click **Send** once to execute the order (`201 Created`), then click **Send** a second time to verify the `409 Conflict` (`Duplicate Order`) idempotency lock in Redis."
+          },
+          "response": [
+            {
+              "name": "409 Conflict — Duplicate Order (Idempotency-Key Collision)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "123e4567-e89b-12d3-a456-426614174000"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/business-rule-violation/409\",\n  \"title\": \"Duplicate Order\",\n  \"status\": 409,\n  \"detail\": \"Order with Idempotency-Key '123e4567-e89b-12d3-a456-426614174000' has already been processed.\",\n  \"parameters\": {\n    \"idempotencyKey\": \"123e4567-e89b-12d3-a456-426614174000\"\n  }\n}"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -9,6 +9,7 @@ import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +41,14 @@ public class GlobalExceptionHandler implements ProblemHandling {
             NativeWebRequest request
     ) {
         Throwable cause = exception.getCause();
+
+        if (cause instanceof UnrecognizedPropertyException unrecognized) {
+            String fieldName = unrecognized.getPropertyName();
+            String message = String.format("Unrecognized field '%s' is not allowed for this request type.", fieldName);
+            log.warn("Unrecognized property in JSON request: {}", message);
+            return ResponseEntity.badRequest()
+                    .body(new BadRequestProblem(message, Map.of("field", fieldName)));
+        }
 
         if (cause instanceof InvalidFormatException invalidFormat && !invalidFormat.getPath().isEmpty()) {
             String fieldName = invalidFormat.getPath().getFirst().getFieldName();
