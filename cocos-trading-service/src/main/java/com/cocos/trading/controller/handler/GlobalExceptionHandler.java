@@ -1,10 +1,12 @@
 package com.cocos.trading.controller.handler;
 
+import com.cocos.trading.api.request.TransferOrderRequestApi;
 import com.cocos.trading.controller.problem.BadRequestProblem;
 import com.cocos.trading.controller.problem.BusinessRuleViolationProblem;
 import com.cocos.trading.controller.problem.ResourceNotFoundProblem;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.exception.DuplicateOrderException;
+import com.cocos.trading.domain.exception.IdempotencyMismatchException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
@@ -44,7 +46,16 @@ public class GlobalExceptionHandler implements ProblemHandling {
 
         if (cause instanceof UnrecognizedPropertyException unrecognized) {
             String fieldName = unrecognized.getPropertyName();
-            String message = String.format("Unrecognized field '%s' is not allowed for this request type.", fieldName);
+            String message;
+            if (unrecognized.getReferringClass() != null
+                    && TransferOrderRequestApi.class.isAssignableFrom(unrecognized.getReferringClass())) {
+                message = String.format(
+                        "Unrecognized field '%s'. Cash transfers (CASH_IN/CASH_OUT) only accept 'userId', 'side', and 'amount'.",
+                        fieldName
+                );
+            } else {
+                message = String.format("Unrecognized field '%s' is not allowed for this request type.", fieldName);
+            }
             log.warn("Unrecognized property in JSON request: {}", message);
             return ResponseEntity.badRequest()
                     .body(new BadRequestProblem(message, Map.of("field", fieldName)));
@@ -121,6 +132,16 @@ public class GlobalExceptionHandler implements ProblemHandling {
                 .body(new BusinessRuleViolationProblem(
                         "Duplicate Order",
                         Status.CONFLICT,
+                        ex.getMessage(),
+                        Map.of("idempotencyKey", ex.getIdempotencyKey().toString())
+                ));
+    }
+
+    @ExceptionHandler(IdempotencyMismatchException.class)
+    public ResponseEntity<Problem> handleIdempotencyMismatchException(IdempotencyMismatchException ex) {
+        log.warn("Idempotency key payload mismatch for key={}: {}", ex.getIdempotencyKey(), ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(new BadRequestProblem(
                         ex.getMessage(),
                         Map.of("idempotencyKey", ex.getIdempotencyKey().toString())
                 ));

@@ -495,11 +495,39 @@
                 "cancel"
               ]
             },
-            "description": "Cancels an order currently in `NEW` status (e.g., seeded `orderId=5` on `LOMA`), transitioning it to `CANCELLED` and returning the updated `TradeOrderApi`."
+            "description": "Cancels an order currently in `NEW` status (e.g., seeded `orderId=5` on `LOMA`), transitioning it to `CANCELLED` (200 OK). If the order is already in `CANCELLED` status, it safely returns 200 OK with the cancelled order without error (idempotent replay)."
           },
           "response": [
             {
-              "name": "200 OK — Order Cancelled",
+              "name": "200 OK — Order Cancelled (Transition from NEW)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/5/cancel",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "5",
+                    "cancel"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 5,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 45,\n    \"ticker\": \"LOMA\"\n  },\n  \"quantity\": 50,\n  \"price\": {\n    \"amount\": 710.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2023-07-12T15:14:20\"\n}"
+            },
+            {
+              "name": "200 OK — Idempotent Replay (Order Already CANCELLED)",
               "originalRequest": {
                 "method": "POST",
                 "header": [],
@@ -712,7 +740,7 @@
                 "orders"
               ]
             },
-            "description": "Tests `OrderCreateRequestValidator` when a `CASH_IN` transfer specifies an unsupported currency (`amount.currency = \"USD\"`). Returns `400 Bad Request` (`BadRequestProblem` under RFC 7807) explaining that `amount.currency is required and must be 'ARS'.`"
+            "description": "Tests `OrderCreateRequestValidator` when a `CASH_IN` transfer specifies an unsupported currency (`amount.currency = \"USD\"`). Returns `400 Bad Request` (`BadRequestProblem` under RFC 7807) dynamically reporting the unsupported currency (`Currency 'USD' is not supported. Only 'ARS' transfers are currently allowed.`)."
           },
           "response": [
             {
@@ -752,7 +780,7 @@
                   "value": "application/problem+json"
                 }
               ],
-              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Validation failed: amount.currency is required and must be 'ARS'.\",\n  \"parameters\": {\n    \"amount\": \"amount.currency is required and must be 'ARS'.\"\n  }\n}"
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Validation failed: Currency 'USD' is not supported. Only 'ARS' transfers are currently allowed.\",\n  \"parameters\": {\n    \"amount\": \"Currency 'USD' is not supported. Only 'ARS' transfers are currently allowed.\"\n  }\n}"
             }
           ]
         },
@@ -824,7 +852,7 @@
                   "value": "application/problem+json"
                 }
               ],
-              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Unrecognized field 'quantity' is not allowed for this request type.\",\n  \"parameters\": {\n    \"field\": \"quantity\"\n  }\n}"
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Unrecognized field 'quantity'. Cash transfers (CASH_IN/CASH_OUT) only accept 'userId', 'side', and 'amount'.\",\n  \"parameters\": {\n    \"field\": \"quantity\"\n  }\n}"
             }
           ]
         },
@@ -1189,14 +1217,14 @@
           ]
         },
         {
-          "name": "4.8 Idempotency — Duplicate Order Retry with Static Key (409 Conflict — Duplicate Order)",
+          "name": "4.8 Idempotency — Safe Order Replay & In-Flight Concurrency Protection",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Idempotency-Key",
                 "value": "123e4567-e89b-12d3-a456-426614174000",
-                "description": "Hardcoded static UUID to test idempotency rejection (send twice to trigger 409 Conflict)"
+                "description": "Static UUID demonstrating Hybrid Idempotency (Safe Replay upon sequential retry, 409 Conflict only during in-flight concurrent burst)"
               },
               {
                 "key": "Content-Type",
@@ -1216,11 +1244,50 @@
                 "orders"
               ]
             },
-            "description": "Uses a static `Idempotency-Key` UUID (`123e4567-e89b-12d3-a456-426614174000`). Click **Send** once to execute the order (`201 Created`), then click **Send** a second time to verify the `409 Conflict` (`Duplicate Order`) idempotency lock in Redis."
+            "description": "Demonstrates True Idempotency (Hybrid Redis Lock + PostgreSQL Safe Replay):\n1. **First Execution**: Creates and executes the order (201 Created), storing `idempotency_key` in PostgreSQL and releasing the Redis lock.\n2. **Sequential Client Retry (Safe Replay)**: If a client timed out and retries with the same `Idempotency-Key`, the engine queries PostgreSQL (`findByIdempotencyKey`) and returns the previously created order safely (`201 Created` with original ID and datetime), avoiding double-spending.\n3. **Concurrent In-Flight Collision**: If two requests arrive in the exact same millisecond, Redis Fast-Fail lock immediately rejects the second in-flight request with `409 Conflict`."
           },
           "response": [
             {
-              "name": "409 Conflict — Duplicate Order (Idempotency-Key Collision)",
+              "name": "201 Created — Safe Idempotent Replay (Returns Existing Order from PostgreSQL)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "123e4567-e89b-12d3-a456-426614174000"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 20,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00\"\n}"
+            },
+            {
+              "name": "409 Conflict — In-Flight Concurrency Collision (Redis Lock Held)",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -1256,7 +1323,128 @@
                   "value": "application/problem+json"
                 }
               ],
-              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/business-rule-violation/409\",\n  \"title\": \"Duplicate Order\",\n  \"status\": 409,\n  \"detail\": \"Order with Idempotency-Key '123e4567-e89b-12d3-a456-426614174000' has already been processed.\",\n  \"parameters\": {\n    \"idempotencyKey\": \"123e4567-e89b-12d3-a456-426614174000\"\n  }\n}"
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/business-rule-violation/409\",\n  \"title\": \"Duplicate Order\",\n  \"status\": 409,\n  \"detail\": \"Order with Idempotency-Key '123e4567-e89b-12d3-a456-426614174000' is currently being processed. Please wait for the in-flight request to complete or retry.\",\n  \"parameters\": {\n    \"idempotencyKey\": \"123e4567-e89b-12d3-a456-426614174000\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "4.9 Cancel Order — Cannot Cancel Terminal FILLED or REJECTED Order (409 Conflict)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/1/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "1",
+                "cancel"
+              ]
+            },
+            "description": "Attempts to cancel an order in a terminal status (`FILLED` or `REJECTED`, such as seeded `orderId=1`). Because terminal orders have already settled in the ledger or failed execution, the transition is rejected with `409 Conflict` (`Invalid Order State`)."
+          },
+          "response": [
+            {
+              "name": "409 Conflict — Invalid Order State (Cannot Cancel Terminal Order)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/1/cancel",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "1",
+                    "cancel"
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/business-rule-violation/409\",\n  \"title\": \"Invalid Order State\",\n  \"status\": 409,\n  \"detail\": \"Cannot cancel order with terminal status FILLED. Only orders with status NEW can be cancelled.\",\n  \"parameters\": {\n    \"orderId\": 1,\n    \"currentStatus\": \"FILLED\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "4.10 Idempotency — Payload Mismatch with Reused Key (400 Bad Request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "123e4567-e89b-12d3-a456-426614174000",
+                "description": "Same Idempotency-Key previously used in 4.8 with quantity=10, now reused with modified quantity=50"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Stripe-style Idempotency Mismatch guard: when a client reuses an already-persisted `Idempotency-Key` (`123e4567-e89b-12d3-a456-426614174000` from request 4.8) but alters payload parameters (e.g., changing `quantity` from `10` to `50`), the SHA-256 `request_hash` mismatch triggers `IdempotencyMismatchException` (`400 Bad Request`)."
+          },
+          "response": [
+            {
+              "name": "400 Bad Request — Idempotency Payload Mismatch",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "123e4567-e89b-12d3-a456-426614174000"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": 1,\n  \"instrumentId\": 47,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 50\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/problem+json"
+                }
+              ],
+              "body": "{\n  \"type\": \"https://api.cocos.com/problems/trading-api/bad-request/400\",\n  \"title\": \"Bad Request\",\n  \"status\": 400,\n  \"detail\": \"Keys for idempotent requests can only be used with the same parameters they were first used with\",\n  \"parameters\": {\n    \"idempotencyKey\": \"123e4567-e89b-12d3-a456-426614174000\"\n  }\n}"
             }
           ]
         }

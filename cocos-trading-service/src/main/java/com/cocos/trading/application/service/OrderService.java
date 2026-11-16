@@ -12,6 +12,7 @@ import com.cocos.trading.application.strategy.OrderExecutionContext;
 import com.cocos.trading.application.strategy.OrderExecutionStrategy;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.exception.DuplicateOrderException;
+import com.cocos.trading.domain.exception.IdempotencyMismatchException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
 import com.cocos.trading.domain.model.InstrumentType;
@@ -46,19 +47,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
 
-        public static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
+        public static final Duration IN_FLIGHT_LOCK_TTL = Duration.ofSeconds(30);
+        public static final Duration IDEMPOTENCY_TTL = IN_FLIGHT_LOCK_TTL;
 
-        // =================================================================================================================
-        // TODO [Production Database Schema Constraint — UNIQUE(idempotency_key)]:
-        // We currently enforce Idempotency and Distributed Locking exclusively via
-        // Redis (24-hour TTL) to strictly respect
-        // the fixed PostgreSQL schema provided by the challenge evaluator (NeonDB /
-        // init.sql) without executing DDL
-        // mutations. In a production environment, a permanent database-level constraint
-        // `UNIQUE(idempotency_key)` on the
-        // `orders` table would be added via a future Flyway/Liquibase migration to
-        // complement the Redis fast-path lock.
-        // =================================================================================================================
         private final IdempotencyRepositoryPort idempotencyRepositoryPort;
         private final UserRepositoryPort userRepositoryPort;
         private final InstrumentRepositoryPort instrumentRepositoryPort;
@@ -71,26 +62,47 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         @Transactional
         public OrderJpaEntity placeOrder(PlaceOrderCommand command) {
                 UUID idempotencyKey = command.idempotencyKey();
+                String requestHash = idempotencyKey != null ? RequestHashUtils.sha256(command) : null;
+
+                // Step A (Fast-Fail Concurrency): Acquire short-lived in-flight lock in Redis
                 if (idempotencyKey != null) {
-                        boolean acquired = idempotencyRepositoryPort.tryAcquire(idempotencyKey, IDEMPOTENCY_TTL);
+                        boolean acquired = idempotencyRepositoryPort.tryAcquire(idempotencyKey, IN_FLIGHT_LOCK_TTL);
                         if (!acquired) {
-                                log.warn("[order] Rejecting duplicate order submission for idempotencyKey={}",
+                                log.warn("[order] Rejecting concurrent in-flight order submission for idempotencyKey={}",
                                                 idempotencyKey);
                                 throw new DuplicateOrderException(idempotencyKey);
                         }
                 }
 
                 try {
-                        return executePlaceOrder(command);
-                } catch (RuntimeException ex) {
+                        // Step B (Safe Replay + Stripe-style Payload Mismatch Guard):
+                        // Check if order was already persisted in PostgreSQL
+                        if (idempotencyKey != null) {
+                                Optional<OrderJpaEntity> existingOrder = orderRepositoryPort.findByIdempotencyKey(idempotencyKey);
+                                if (existingOrder.isPresent()) {
+                                        OrderJpaEntity persistedOrder = existingOrder.get();
+                                        if (persistedOrder.getRequestHash() != null
+                                                        && !persistedOrder.getRequestHash().equals(requestHash)) {
+                                                log.warn("[order] Idempotency payload mismatch for idempotencyKey={}",
+                                                                idempotencyKey);
+                                                throw new IdempotencyMismatchException(idempotencyKey);
+                                        }
+                                        log.info("[order] Idempotent replay returning existing orderId={} for idempotencyKey={}",
+                                                        persistedOrder.getId(), idempotencyKey);
+                                        return persistedOrder;
+                                }
+                        }
+
+                        // Step C (Execution): Process order business logic and persist with idempotency_key + request_hash
+                        return executePlaceOrder(command, requestHash);
+                } finally {
                         if (idempotencyKey != null) {
                                 idempotencyRepositoryPort.release(idempotencyKey);
                         }
-                        throw ex;
                 }
         }
 
-        private OrderJpaEntity executePlaceOrder(PlaceOrderCommand command) {
+        private OrderJpaEntity executePlaceOrder(PlaceOrderCommand command, String requestHash) {
                 Timer.Sample executionSample = tradingMetricsService.startOrderTimer();
                 log.info("[order] Placing order from command={}", command);
 
@@ -125,6 +137,9 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
                                                                 command.type(), command.side())));
 
                 OrderJpaEntity evaluatedOrder = strategy.execute(context);
+                if (requestHash != null) {
+                        evaluatedOrder.setRequestHash(requestHash);
+                }
                 OrderJpaEntity savedOrder = orderRepositoryPort.save(evaluatedOrder);
 
                 String status = savedOrder.getStatus().name();
@@ -159,23 +174,28 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
                 OrderJpaEntity existingOrder = orderRepositoryPort.findById(orderId)
                                 .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
 
-                if (existingOrder.getStatus() != OrderStatus.NEW) {
-                        throw new InvalidOrderStateException(
+                return switch (existingOrder.getStatus()) {
+                        case CANCELLED -> {
+                                log.info("[order] Idempotent cancellation replay for already CANCELLED orderId={}", orderId);
+                                yield existingOrder;
+                        }
+                        case NEW -> {
+                                existingOrder.setStatus(OrderStatus.CANCELLED);
+                                OrderJpaEntity savedOrder = orderRepositoryPort.save(existingOrder);
+
+                                tradingMetricsService.recordOrderProcessed(
+                                                savedOrder.getStatus().name(),
+                                                savedOrder.getType().name(),
+                                                savedOrder.getSide().name());
+
+                                log.info("[order] Cancelled orderId={}", savedOrder.getId());
+                                yield savedOrder;
+                        }
+                        case FILLED, REJECTED -> throw new InvalidOrderStateException(
                                         orderId,
                                         existingOrder.getStatus(),
-                                        String.format("Only orders with status NEW can be cancelled. Current status: %s",
+                                        String.format("Cannot cancel order with terminal status %s. Only orders with status NEW can be cancelled.",
                                                         existingOrder.getStatus()));
-                }
-
-                existingOrder.setStatus(OrderStatus.CANCELLED);
-                OrderJpaEntity savedOrder = orderRepositoryPort.save(existingOrder);
-
-                tradingMetricsService.recordOrderProcessed(
-                                savedOrder.getStatus().name(),
-                                savedOrder.getType().name(),
-                                savedOrder.getSide().name());
-
-                log.info("[order] Cancelled orderId={}", savedOrder.getId());
-                return savedOrder;
+                };
         }
 }

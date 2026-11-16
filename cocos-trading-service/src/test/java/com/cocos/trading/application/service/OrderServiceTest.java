@@ -24,6 +24,7 @@ import com.cocos.trading.application.strategy.LimitOrderExecutionStrategy;
 import com.cocos.trading.application.strategy.MarketOrderExecutionStrategy;
 import com.cocos.trading.domain.exception.BusinessRuleViolationException;
 import com.cocos.trading.domain.exception.DuplicateOrderException;
+import com.cocos.trading.domain.exception.IdempotencyMismatchException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.OrderSide;
@@ -269,8 +270,8 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("Should cancel order when status is NEW and reject cancellation when status is FILLED")
-        void shouldOnlyCancelOrdersWithNewStatus() {
+        @DisplayName("Should cancel order when status is NEW, allow idempotent replay when already CANCELLED, and reject cancellation when status is FILLED")
+        void shouldHandleOrderCancellationAndIdempotentReplay() {
                 OrderJpaEntity newOrder = TradeOrderJpaEntity.builder()
                                 .id(50L)
                                 .user(TradingFixtures.defaultUser())
@@ -285,12 +286,14 @@ class OrderServiceTest {
                 when(orderRepositoryPort.findById(50L)).thenReturn(Optional.of(newOrder));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
+                // 1. Initial cancellation transitions NEW -> CANCELLED
                 OrderJpaEntity cancelled = orderService.cancelOrder(50L);
                 assertEquals(OrderStatus.CANCELLED, cancelled.getStatus());
                 assertNotNull(cancelled.getUser());
                 assertEquals("10001", cancelled.getUser().getAccountNumber());
                 assertNotNull(cancelled.getInstrument());
                 assertEquals("PAMP", cancelled.getInstrument().getTicker());
+                verify(orderRepositoryPort, times(1)).save(any(OrderJpaEntity.class));
 
                 Counter cancelledCounter = meterRegistry.find(TradingMetricsService.ORDERS_PROCESSED_METRIC)
                                 .tags("status", "CANCELLED", "type", "LIMIT", "side", "BUY")
@@ -298,6 +301,14 @@ class OrderServiceTest {
                 assertNotNull(cancelledCounter);
                 assertEquals(1.0, cancelledCounter.count());
 
+                // 2. Idempotent replay: order is ALREADY CANCELLED -> returns safely without re-saving or double-counting metrics
+                when(orderRepositoryPort.findById(50L)).thenReturn(Optional.of(cancelled));
+                OrderJpaEntity replayCancelled = orderService.cancelOrder(50L);
+                assertEquals(OrderStatus.CANCELLED, replayCancelled.getStatus());
+                verify(orderRepositoryPort, times(1)).save(any(OrderJpaEntity.class)); // still 1, not saved again
+                assertEquals(1.0, cancelledCounter.count()); // still 1.0, not double counted
+
+                // 3. Attempting to cancel FILLED order throws InvalidOrderStateException
                 OrderJpaEntity filledOrder = TradingFixtures.filledBuyOrder(51L, TradingFixtures.PAMP_INSTRUMENT_ID, 10,
                                 "900.00");
                 when(orderRepositoryPort.findById(51L)).thenReturn(Optional.of(filledOrder));
@@ -422,8 +433,8 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("Should reject duplicate order with DuplicateOrderException when Idempotency-Key already exists in Redis")
-        void shouldRejectDuplicateOrderWhenIdempotencyKeyAlreadyExists() {
+        @DisplayName("Should reject concurrent in-flight order with DuplicateOrderException when Redis lock is already held")
+        void shouldRejectConcurrentInFlightOrderWhenRedisLockIsHeld() {
                 UUID duplicateKey = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
                 PlaceOrderCommand command = PlaceOrderCommand.builder()
                                 .idempotencyKey(duplicateKey)
@@ -434,7 +445,7 @@ class OrderServiceTest {
                                 .quantity(10)
                                 .build();
 
-                when(idempotencyRepositoryPort.tryAcquire(duplicateKey, Duration.ofHours(24)))
+                when(idempotencyRepositoryPort.tryAcquire(duplicateKey, OrderService.IN_FLIGHT_LOCK_TTL))
                                 .thenReturn(false);
 
                 DuplicateOrderException exception = assertThrows(
@@ -442,8 +453,108 @@ class OrderServiceTest {
                                 () -> orderService.placeOrder(command));
 
                 assertEquals(duplicateKey, exception.getIdempotencyKey());
+                assertTrue(exception.getMessage().contains("is currently being processed"));
+                verify(orderRepositoryPort, never()).findByIdempotencyKey(any());
                 verify(orderRepositoryPort, never()).save(any());
                 verify(idempotencyRepositoryPort, never()).release(any());
+        }
+
+        @Test
+        @DisplayName("Should return persisted order on safe idempotent replay when order already exists in database")
+        void shouldReturnPersistedOrderOnSafeIdempotentReplayWhenFoundInDatabase() {
+                UUID idempotencyKey = UUID.randomUUID();
+                PlaceOrderCommand command = PlaceOrderCommand.builder()
+                                .idempotencyKey(idempotencyKey)
+                                .userId(TradingFixtures.DEFAULT_USER_ID)
+                                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
+                                .side(OrderSide.BUY)
+                                .type(OrderType.MARKET)
+                                .quantity(10)
+                                .build();
+
+                OrderJpaEntity existingOrder = TradeOrderJpaEntity.builder()
+                                .id(105L)
+                                .idempotencyKey(idempotencyKey)
+                                .requestHash(RequestHashUtils.sha256(command))
+                                .user(TradingFixtures.defaultUser())
+                                .instrument(TradingFixtures.pampInstrument())
+                                .quantity(10)
+                                .price(new BigDecimal("925.85"))
+                                .type(OrderType.MARKET)
+                                .side(OrderSide.BUY)
+                                .status(OrderStatus.FILLED)
+                                .datetime(LocalDateTime.of(2024, 7, 15, 12, 0))
+                                .build();
+
+                when(idempotencyRepositoryPort.tryAcquire(idempotencyKey, OrderService.IN_FLIGHT_LOCK_TTL))
+                                .thenReturn(true);
+                when(orderRepositoryPort.findByIdempotencyKey(idempotencyKey))
+                                .thenReturn(Optional.of(existingOrder));
+
+                OrderJpaEntity result = orderService.placeOrder(command);
+
+                assertNotNull(result);
+                assertEquals(105L, result.getId());
+                assertEquals(idempotencyKey, result.getIdempotencyKey());
+                assertEquals(OrderStatus.FILLED, result.getStatus());
+                assertEquals(10, result.getQuantity());
+
+                // Assert database was NOT called to save duplicate, strategies were bypassed, and lock was released
+                verify(orderRepositoryPort, never()).save(any());
+                verify(idempotencyRepositoryPort, times(1)).release(idempotencyKey);
+        }
+
+        @Test
+        @DisplayName("Should throw IdempotencyMismatchException when reusing Idempotency-Key with different payload")
+        void shouldThrowIdempotencyMismatchExceptionWhenPayloadDiffersForSameKey() {
+                UUID idempotencyKey = UUID.randomUUID();
+                PlaceOrderCommand originalCommand = PlaceOrderCommand.builder()
+                                .idempotencyKey(idempotencyKey)
+                                .userId(TradingFixtures.DEFAULT_USER_ID)
+                                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
+                                .side(OrderSide.BUY)
+                                .type(OrderType.MARKET)
+                                .quantity(10)
+                                .build();
+
+                PlaceOrderCommand modifiedCommand = PlaceOrderCommand.builder()
+                                .idempotencyKey(idempotencyKey)
+                                .userId(TradingFixtures.DEFAULT_USER_ID)
+                                .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
+                                .side(OrderSide.BUY)
+                                .type(OrderType.MARKET)
+                                .quantity(25)
+                                .build();
+
+                OrderJpaEntity existingOrder = TradeOrderJpaEntity.builder()
+                                .id(105L)
+                                .idempotencyKey(idempotencyKey)
+                                .requestHash(RequestHashUtils.sha256(originalCommand))
+                                .user(TradingFixtures.defaultUser())
+                                .instrument(TradingFixtures.pampInstrument())
+                                .quantity(10)
+                                .price(new BigDecimal("925.85"))
+                                .type(OrderType.MARKET)
+                                .side(OrderSide.BUY)
+                                .status(OrderStatus.FILLED)
+                                .datetime(LocalDateTime.of(2024, 7, 15, 12, 0))
+                                .build();
+
+                when(idempotencyRepositoryPort.tryAcquire(idempotencyKey, OrderService.IN_FLIGHT_LOCK_TTL))
+                                .thenReturn(true);
+                when(orderRepositoryPort.findByIdempotencyKey(idempotencyKey))
+                                .thenReturn(Optional.of(existingOrder));
+
+                IdempotencyMismatchException exception = assertThrows(
+                                IdempotencyMismatchException.class,
+                                () -> orderService.placeOrder(modifiedCommand));
+
+                assertEquals(idempotencyKey, exception.getIdempotencyKey());
+                assertEquals(
+                                "Keys for idempotent requests can only be used with the same parameters they were first used with",
+                                exception.getMessage());
+                verify(orderRepositoryPort, never()).save(any());
+                verify(idempotencyRepositoryPort, times(1)).release(idempotencyKey);
         }
 
         @Test

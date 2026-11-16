@@ -64,6 +64,7 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
         OrderStatus status = resolvedUnits > 0 ? OrderStatus.FILLED : OrderStatus.REJECTED;
 
         return TransferOrderJpaEntity.builder()
+                .idempotencyKey(command.idempotencyKey())
                 .user(context.user())
                 .instrument(context.instrument())
                 .quantity(resolvedUnits)

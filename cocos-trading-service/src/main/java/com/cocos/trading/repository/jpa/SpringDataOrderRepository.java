@@ -4,6 +4,7 @@ import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.repository.entity.OrderJpaEntity;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -23,6 +24,15 @@ public interface SpringDataOrderRepository extends JpaRepository<OrderJpaEntity,
     @Override
     @EntityGraph(attributePaths = {"user", "instrument"})
     Optional<OrderJpaEntity> findById(Long id);
+
+    /**
+     * Retrieves an order by its unique client-provided idempotency key, eagerly fetching associated {@code user} and {@code instrument}.
+     *
+     * @param idempotencyKey Unique UUID key.
+     * @return Optional containing the hydrated {@link OrderJpaEntity} if found.
+     */
+    @EntityGraph(attributePaths = {"user", "instrument"})
+    Optional<OrderJpaEntity> findByIdempotencyKey(UUID idempotencyKey);
 
     /**
      * Retrieves all orders for a given user with a specific status, ordered chronologically by datetime and ID,

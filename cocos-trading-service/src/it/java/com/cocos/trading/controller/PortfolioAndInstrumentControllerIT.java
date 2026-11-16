@@ -76,27 +76,27 @@ class PortfolioAndInstrumentControllerIT extends TradingApplicationIT {
                                 new BigDecimal("906.35"),
                                 LocalDate.of(2024, 7, 15)));
 
-                orderRepository.save(new TransferOrderJpaEntity(
-                                null,
-                                arsInstrument,
-                                savedUser,
-                                100_000,
-                                new BigDecimal("1.00"),
-                                OrderType.MARKET,
-                                OrderSide.CASH_IN,
-                                OrderStatus.FILLED,
-                                LocalDateTime.of(2024, 7, 1, 10, 0)));
+                orderRepository.save(TransferOrderJpaEntity.builder()
+                                .instrument(arsInstrument)
+                                .user(savedUser)
+                                .quantity(100_000)
+                                .price(new BigDecimal("1.00"))
+                                .type(OrderType.MARKET)
+                                .side(OrderSide.CASH_IN)
+                                .status(OrderStatus.FILLED)
+                                .datetime(LocalDateTime.of(2024, 7, 1, 10, 0))
+                                .build());
 
-                orderRepository.save(new TradeOrderJpaEntity(
-                                null,
-                                pampInstrument,
-                                savedUser,
-                                10,
-                                new BigDecimal("800.00"),
-                                OrderType.MARKET,
-                                OrderSide.BUY,
-                                OrderStatus.FILLED,
-                                LocalDateTime.of(2024, 7, 2, 11, 0)));
+                orderRepository.save(TradeOrderJpaEntity.builder()
+                                .instrument(pampInstrument)
+                                .user(savedUser)
+                                .quantity(10)
+                                .price(new BigDecimal("800.00"))
+                                .type(OrderType.MARKET)
+                                .side(OrderSide.BUY)
+                                .status(OrderStatus.FILLED)
+                                .datetime(LocalDateTime.of(2024, 7, 2, 11, 0))
+                                .build());
         }
 
         @Test

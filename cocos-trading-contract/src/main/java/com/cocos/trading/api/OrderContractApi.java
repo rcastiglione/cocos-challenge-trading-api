@@ -47,14 +47,16 @@ public interface OrderContractApi {
     );
 
     /**
-     * Cancels an existing order if its current status is NEW.
+     * Cancels an existing order if its current status is NEW, or safely returns 200 OK if already CANCELLED.
      *
      * @param orderId The ID of the order to cancel.
-     * @return The updated {@link OrderApi} with status CANCELLED.
+     * @return The updated or existing {@link OrderApi} with status CANCELLED.
      */
     @Operation(
-            summary = "Cancel a pending order",
-            description = "Cancels an order that is currently in NEW status"
+            summary = "Cancel a pending order (Idempotent)",
+            description = "Cancels an order that is currently in NEW status (returning 200 OK with CANCELLED status). "
+                    + "If the order is ALREADY CANCELLED, safely returns 200 OK with the cancelled order (idempotent replay). "
+                    + "Orders in terminal status FILLED or REJECTED cannot be cancelled and return 409 Conflict."
     )
     OrderApi cancel(
             @Parameter(description = "Order ID to cancel", example = "105", required = true)

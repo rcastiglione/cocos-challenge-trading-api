@@ -54,6 +54,7 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
         OrderStatus status = determineStatus(context, executionPrice, resolvedQuantity);
 
         return TradeOrderJpaEntity.builder()
+                .idempotencyKey(command.idempotencyKey())
                 .user(context.user())
                 .instrument(context.instrument())
                 .quantity(resolvedQuantity)

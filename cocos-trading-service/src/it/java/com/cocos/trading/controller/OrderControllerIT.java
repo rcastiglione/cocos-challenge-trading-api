@@ -116,17 +116,16 @@ class OrderControllerIT extends TradingApplicationIT {
         ));
 
         // Seed 50,000 ARS available cash via a FILLED CASH_IN order
-        orderRepository.save(new TransferOrderJpaEntity(
-                null,
-                arsInstrument,
-                savedUser,
-                50_000,
-                new BigDecimal("1.00"),
-                OrderType.MARKET,
-                OrderSide.CASH_IN,
-                OrderStatus.FILLED,
-                LocalDateTime.of(2024, 7, 1, 10, 0)
-        ));
+        orderRepository.save(TransferOrderJpaEntity.builder()
+                .instrument(arsInstrument)
+                .user(savedUser)
+                .quantity(50_000)
+                .price(new BigDecimal("1.00"))
+                .type(OrderType.MARKET)
+                .side(OrderSide.CASH_IN)
+                .status(OrderStatus.FILLED)
+                .datetime(LocalDateTime.of(2024, 7, 1, 10, 0))
+                .build());
     }
 
     @Test
@@ -250,7 +249,7 @@ class OrderControllerIT extends TradingApplicationIT {
     }
 
     @Test
-    @DisplayName("Should create LIMIT order with status NEW and allow cancelling it to CANCELLED")
+    @DisplayName("Should create LIMIT order with status NEW and allow idempotent cancellation replay")
     void shouldCreateLimitOrderAsNewAndCancelIt() throws Exception {
         OrderCreateRequestApi limitRequest = new TradeOrderRequestApi(
                 savedUser.getId(),
@@ -280,6 +279,7 @@ class OrderControllerIT extends TradingApplicationIT {
 
         Long createdOrderId = objectMapper.readTree(responseJson).get("id").asLong();
 
+        // 1. Initial cancellation: transitions NEW -> CANCELLED (200 OK)
         mockMvc.perform(post("/orders/{orderId}/cancel", createdOrderId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(createdOrderId))
@@ -288,6 +288,22 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$.instrument.id").value(pampInstrument.getId()))
                 .andExpect(jsonPath("$.instrument.ticker").value("PAMP"))
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        // 2. Idempotent replay: already CANCELLED -> returns 200 OK without error
+        mockMvc.perform(post("/orders/{orderId}/cancel", createdOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(createdOrderId))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        // 3. Attempting to cancel an order with terminal FILLED status returns 409 Conflict
+        OrderJpaEntity filledOrder = orderRepository.findByUserIdAndStatusOrderByDatetimeAscIdAsc(
+                savedUser.getId(),
+                OrderStatus.FILLED
+        ).getFirst();
+
+        mockMvc.perform(post("/orders/{orderId}/cancel", filledOrder.getId()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Invalid Order State"));
     }
 
     @Test
@@ -406,6 +422,8 @@ class OrderControllerIT extends TradingApplicationIT {
                         .content(invalidCashTransferJsonWithQuantity))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.detail").value(
+                        "Unrecognized field 'quantity'. Cash transfers (CASH_IN/CASH_OUT) only accept 'userId', 'side', and 'amount'."))
                 .andExpect(jsonPath("$.parameters.field").value("quantity"));
 
         // 4. Invalid CASH_IN payload missing 'amount' -> 400 Bad Request
@@ -434,7 +452,11 @@ class OrderControllerIT extends TradingApplicationIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(unsupportedCurrencyTransfer)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Bad Request"));
+                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.detail").value(
+                        "Validation failed: Currency 'USD' is not supported. Only 'ARS' transfers are currently allowed."))
+                .andExpect(jsonPath("$.parameters.amount").value(
+                        "Currency 'USD' is not supported. Only 'ARS' transfers are currently allowed."));
     }
 
     @Test
@@ -467,8 +489,8 @@ class OrderControllerIT extends TradingApplicationIT {
     }
 
     @Test
-    @DisplayName("Should store Idempotency-Key in Redis with 24h TTL and reject duplicate network retry with 409 Conflict")
-    void shouldStoreIdempotencyKeyInRedisAndRejectDuplicateRetry() throws Exception {
+    @DisplayName("Should persist Idempotency-Key in database and safely replay existing order on sequential client retry")
+    void shouldPersistIdempotencyKeyInDatabaseAndSafelyReplayOnSubsequentRetry() throws Exception {
         UUID idempotencyKey = UUID.randomUUID();
         OrderCreateRequestApi cashInRequest = new TransferOrderRequestApi(
                 savedUser.getId(),
@@ -477,7 +499,7 @@ class OrderControllerIT extends TradingApplicationIT {
         );
 
         // 1st attempt succeeds (201 Created)
-        mockMvc.perform(post("/orders")
+        String firstResponseJson = mockMvc.perform(post("/orders")
                         .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, idempotencyKey.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(cashInRequest)))
@@ -487,22 +509,50 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$.type").doesNotExist())
                 .andExpect(jsonPath("$.quantity").doesNotExist())
                 .andExpect(jsonPath("$.price").doesNotExist())
-                .andExpect(jsonPath("$.status").value("FILLED"));
+                .andExpect(jsonPath("$.status").value("FILLED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
-        // Verify key is stored in Redis with ~24h TTL (86,400s)
+        Long createdOrderId = objectMapper.readTree(firstResponseJson).get("id").asLong();
+
+        // Verify short-lived in-flight lock was released from Redis after transaction completed
         String redisKey = RedisIdempotencyAdapter.buildRedisKey(idempotencyKey);
-        assertEquals(Boolean.TRUE, stringRedisTemplate.hasKey(redisKey));
-        Long ttlSeconds = stringRedisTemplate.getExpire(redisKey, TimeUnit.SECONDS);
-        assertNotNull(ttlSeconds);
-        assertTrue(ttlSeconds > 86_000L && ttlSeconds <= 86_400L, "Expected TTL close to 24h (86400s), got: " + ttlSeconds);
+        assertEquals(Boolean.FALSE, stringRedisTemplate.hasKey(redisKey));
 
-        // 2nd attempt (network retry with identical Idempotency-Key) is rejected with 409 Conflict
+        // Verify order is persisted in PostgreSQL with its unique idempotency_key and SHA-256 request_hash
+        OrderJpaEntity persistedOrder = orderRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
+        assertNotNull(persistedOrder);
+        assertEquals(createdOrderId, persistedOrder.getId());
+        assertEquals(idempotencyKey, persistedOrder.getIdempotencyKey());
+        assertNotNull(persistedOrder.getRequestHash());
+        assertEquals(64, persistedOrder.getRequestHash().length());
+
+        // 2nd attempt (network retry with identical Idempotency-Key & payload) -> Safe Replay returning the SAME order (201 Created)
         mockMvc.perform(post("/orders")
                         .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, idempotencyKey.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(cashInRequest)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Duplicate Order"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(createdOrderId))
+                .andExpect(jsonPath("$.amount.amount").value(25000.00))
+                .andExpect(jsonPath("$.amount.currency").value("ARS"))
+                .andExpect(jsonPath("$.status").value("FILLED"));
+
+        // 3rd attempt (Stripe-style Idempotency Mismatch: same Idempotency-Key, different amount) -> 400 Bad Request
+        OrderCreateRequestApi tamperedCashInRequest = new TransferOrderRequestApi(
+                savedUser.getId(),
+                OrderSideApi.CASH_IN,
+                MonetaryAmount.ars(new BigDecimal("50000.00"))
+        );
+        mockMvc.perform(post("/orders")
+                        .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, idempotencyKey.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(tamperedCashInRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.detail").value(
+                        "Keys for idempotent requests can only be used with the same parameters they were first used with"))
                 .andExpect(jsonPath("$.parameters.idempotencyKey").value(idempotencyKey.toString()));
 
         // Ensure no duplicate order was persisted in PostgreSQL (1 initial seed + 1 new CASH_IN = 2 total)

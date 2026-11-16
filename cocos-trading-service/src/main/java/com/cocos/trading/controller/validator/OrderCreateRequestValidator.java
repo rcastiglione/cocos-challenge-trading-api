@@ -135,7 +135,11 @@ public class OrderCreateRequestValidator implements Validator {
                     request.amount(),
                     "amount",
                     "amount.invalid",
-                    "amount.amount must be greater than 0."
+                    "amount.amount must be greater than 0.",
+                    currency -> String.format(
+                            "Currency '%s' is not supported. Only 'ARS' transfers are currently allowed.",
+                            currency
+                    )
             );
         }
     }

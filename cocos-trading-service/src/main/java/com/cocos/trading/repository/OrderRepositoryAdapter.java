@@ -6,6 +6,7 @@ import com.cocos.trading.repository.entity.OrderJpaEntity;
 import com.cocos.trading.repository.jpa.SpringDataOrderRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,11 @@ public class OrderRepositoryAdapter implements OrderRepositoryPort {
     @Override
     public Optional<OrderJpaEntity> findById(Long id) {
         return springDataOrderRepository.findById(id);
+    }
+
+    @Override
+    public Optional<OrderJpaEntity> findByIdempotencyKey(UUID idempotencyKey) {
+        return springDataOrderRepository.findByIdempotencyKey(idempotencyKey);
     }
 
     @Override

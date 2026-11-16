@@ -18,6 +18,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -38,6 +39,8 @@ import org.hibernate.annotations.DiscriminatorFormula;
  * <li>Models foreign keys as object-oriented {@link ManyToOne} relationships to
  * {@link UserJpaEntity}
  * and {@link InstrumentJpaEntity}.</li>
+ * <li>Enforces distributed idempotency and safe replay via unique
+ * {@code idempotency_key}.</li>
  * </ul>
  */
 @Entity
@@ -51,29 +54,13 @@ import org.hibernate.annotations.DiscriminatorFormula;
 @SuperBuilder(toBuilder = true)
 public abstract class OrderJpaEntity {
 
-    // =================================================================================================================
-    // TODO [Database Schema & Idempotency Architecture]:
-    // In a real production environment, we would add an `idempotency_key UUID NOT
-    // NULL` column with a strict database
-    // constraint `CONSTRAINT uq_orders_idempotency_key UNIQUE (idempotency_key)`
-    // directly to the `orders` table in
-    // PostgreSQL via a controlled Flyway/Liquibase migration as the ultimate ACID
-    // safety net.
-    // Because we must strictly respect the fixed relational database schema
-    // provided by the challenge evaluator
-    // (NeonDB / init.sql), we enforce idempotency and distributed locking at the
-    // application/infrastructure boundary
-    // using Redis (`SET idempotency:orders:<uuid> ... NX EX 86400` with a 24-hour
-    // TTL).
-    // =================================================================================================================
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
+    @Column(name = "idempotency_key", unique = true, updatable = false)
+    private UUID idempotencyKey;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "instrumentid", nullable = false)
     private InstrumentJpaEntity instrument;
@@ -123,4 +110,7 @@ public abstract class OrderJpaEntity {
     // level.
     @Column(name = "datetime", nullable = false)
     private LocalDateTime datetime;
+
+    @Column(name = "request_hash", length = 256, updatable = false)
+    private String requestHash;
 }

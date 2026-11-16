@@ -35,6 +35,7 @@
         <build-helper.version>3.6.0</build-helper.version>
         <testcontainers.version>1.21.1</testcontainers.version>
         <lombok.version>1.18.38</lombok.version>
+        <flyway.version>11.14.1</flyway.version>
     </properties>
 
     <dependencyManagement>

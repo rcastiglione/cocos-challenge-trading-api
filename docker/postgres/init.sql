@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS orders (
     type VARCHAR(10),
     side VARCHAR(10),
     status VARCHAR(20),
-    datetime TIMESTAMP
+    datetime TIMESTAMP,
+    idempotency_key UUID CONSTRAINT uq_orders_idempotency_key UNIQUE,
+    request_hash VARCHAR(256)
 );
 
 CREATE TABLE IF NOT EXISTS marketdata (

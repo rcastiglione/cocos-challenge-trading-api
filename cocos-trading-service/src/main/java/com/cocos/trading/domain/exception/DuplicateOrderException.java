@@ -14,7 +14,7 @@ public class DuplicateOrderException extends BusinessRuleViolationException {
 
     public DuplicateOrderException(UUID idempotencyKey) {
         super(String.format(
-                "Duplicate order request rejected: Idempotency-Key '%s' has already been processed or is currently in progress.",
+                "Order with Idempotency-Key '%s' is currently being processed. Please wait for the in-flight request to complete or retry.",
                 idempotencyKey
         ));
         this.idempotencyKey = idempotencyKey;

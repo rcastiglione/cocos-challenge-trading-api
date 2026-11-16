@@ -8,7 +8,8 @@ Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, 
 
 - **Java 21** (*Records*, *Pattern Matching*, *Switch Expressions*, *Virtual Threads*)
 - **Spring Boot 3.3.0** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-data-redis`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`)
-- **Redis 7 (`redis:7-alpine`)**: *In-Memory Store & Distributed Lock* para garantizar **Idempotencia** en la creación de órdenes (`Idempotency-Key` con TTL de 24 horas vía comandos atómicos `SET ... NX EX 86400`), previniendo *double-spending* ante *network retries* o ráfagas concurrentes
+- **Redis 7 (`redis:7-alpine`)**: *In-Memory Fast-Fail Distributed Lock* para ráfagas concurrentes en vuelo (`IN_FLIGHT_LOCK_TTL = 30s` vía comandos atómicos `SET ... NX EX 30`), previniendo condiciones de carrera y *double-spending* simultáneo
+- **PostgreSQL 16 & Flyway (`flyway-core` + `flyway-database-postgresql`)**: Versionado y migración continua del esquema relacional (`V1__init_schema.sql`, `V2__add_idempotency_key_to_orders.sql`), asegurando **True Idempotency** con *Safe Replay* duradero y validación **Stripe-style Idempotency Mismatch** (`request_hash` SHA-256) respaldados por `CONSTRAINT uq_orders_idempotency_key UNIQUE (idempotency_key)`
 - **Observability & Telemetry Stack** (*Nice-to-Have SRE Layer*): **Micrometer (`micrometer-registry-prometheus`)**, **Distributed Tracing (`micrometer-tracing-bridge-brave` con W3C `traceId`/`spanId` en logs)**, **Prometheus** y **Grafana** (con *Zero-Touch Auto-Provisioning* de *datasource* y *dashboard* en tiempo real)
 - **Lombok** (`@SuperBuilder`, `@Builder`, `@Getter`, `@RequiredArgsConstructor`, `@Slf4j`) para reducir *boilerplate* en modelos de dominio, *DTOs*, *JPA Entities* y servicios
 - **PostgreSQL 16** (NeonDB cloud PostgreSQL para el perfil `prod`, **Docker Compose** para desarrollo `local`, y **Testcontainers (`PostgreSQLContainer` + `RedisContainer`)** para *functional integration testing* con paridad 100% de infraestructura)
@@ -132,21 +133,22 @@ cocos-challenge-trading-api/
 
 ---
 
-### 3.7. Idempotencia y Control de Concurrencia Distribuida (`Idempotency-Key` + Redis)
-- **Contexto & Problema (*Double-Spending & Retry Storms*)**:
-  En motores de trading y pasarelas de pago (*payment gateways*), los clientes móviles o *frontends* web frecuentemente sufren *timeouts* de red o micro-cortes tras enviar un `POST /orders` y reintentan automáticamente la petición (*network retries*), o bien un usuario ansioso hace *double-click* disparando dos *requests* simultáneos. Sin un mecanismo de **Idempotencia y Distributed Locking**, un reintento sobre un `CASH_OUT`, un `CASH_IN` o una orden `MARKET BUY`/`SELL` provocaría **duplicación de órdenes y *double-spending*** sobre el saldo comitente del usuario.
-- **Solución Arquitectónica (`Idempotency-Key` + Redis `SET NX EX`)**:
-  1. **Contrato Explícito (`Idempotency-Key` UUID Header)**: El endpoint `POST /orders` exige un *header* HTTP obligatorio `Idempotency-Key` en formato `UUID` (documentado en `OrderContractApi` / OpenAPI y validado en el *controller*). Si el *header* falta o no es un UUID válido, la API responde inmediatamente con `400 Bad Request` (`BadRequestProblem` bajo RFC 7807).
-  2. **Distributed Lock Atómico & Deduplicación con TTL de 24h (`RedisIdempotencyAdapter`)**:
-     A través del puerto de salida `IdempotencyRepositoryPort` (preservando la arquitectura hexagonal pura), `OrderService.placeOrder` invoca `tryAcquire(idempotencyKey, Duration.ofHours(24))`, el cual ejecuta en **Redis** el comando atómico:
-     ```text
-     SET idempotency:orders:<Idempotency-Key> <timestamp> NX EX 86400
-     ```
-     - **`NX` (*Not Exists*)**: Garantiza a nivel de *single-threaded event loop* en Redis que, si llegan 10 *requests* concurrentes en el mismo milisegundo con la misma `Idempotency-Key`, **exactamente uno** adquiere el *lock* e ingresa a la transacción de negocio (`placeOrder`), mientras que los 9 restantes reciben `false` y son rechazados instantáneamente con `409 Conflict` (`DuplicateOrderException` -> `BusinessRuleViolationProblem`) sin siquiera consumir conexiones de PostgreSQL.
-     - **`EX 86400` (*24-Hour TTL*)**: Una vez que la orden se procesa y persiste exitosamente (`FILLED`, `NEW` o `REJECTED`), la clave permanece registrada en Redis durante **24 horas**, bloqueando cualquier reintento tardío de red dentro de esa ventana.
-     - **Compensación ante Rollback (`release`)**: Si ocurre una excepción antes de persistir la orden (por ejemplo, un `CASH_OUT` rechazado por fondos insuficientes o un `ResourceNotFoundException` que hace *rollback* de la transacción), el bloque `catch` libera la clave en Redis (`DEL`) para no bloquear innecesariamente la clave.
-- **Decisión Arquitectónica: ¿Por qué Redis en lugar de `UNIQUE(idempotency_key)` en PostgreSQL?**:
-  En un entorno productivo real, además del *fast-path lock* en Redis, agregaríamos una columna `idempotency_key UUID NOT NULL` con un *constraint* `UNIQUE(idempotency_key)` directamente en la tabla `orders` de PostgreSQL mediante una migración de **Flyway / Liquibase** como red de seguridad ACID definitiva (dejamos documentado este `// TODO` explícitamente en `OrderJpaEntity` y `OrderService`). Sin embargo, para **respetar estrictamente el esquema de base de datos fijo provisto por el evaluador del challenge** en NeonDB sin ejecutar `ALTER TABLE` destructivos, implementamos la capa de idempotencia 100% desacoplada en **Redis**.
+### 3.7. True Idempotency y Control de Concurrencia Híbrido (Redis In-Flight Lock + PostgreSQL Safe Replay + Cancelación Idempotente)
+- **Contexto & Problema (*Double-Spending, Network Timeouts & Sub-Optimal DX*)**:
+  En motores de trading y pasarelas de pago (*payment gateways*), los clientes sufren con frecuencia *timeouts* de red tras enviar un `POST /orders` y reintentan automáticamente la petición (*network retries*), o envían ráfagas simultáneas por *double-click*. Si el sistema únicamente rechaza con `409 Conflict`, el cliente desconoce el `id` y estado de su orden ya creada. Asimismo, si la cancelación (`POST /orders/{id}/cancel`) falla con error ante reintentos de una orden ya cancelada, se degrada la experiencia de integración (DX).
+- **Solución Arquitectónica Híbrida (Redis Fast-Fail + PostgreSQL Safe Replay)**:
+  1. **Contrato Explícito (`Idempotency-Key` UUID Header)**: `POST /orders` exige un *header* obligatorio `Idempotency-Key` en formato `UUID` (documentado en `OrderContractApi`). Si falta o es inválido, responde inmediatamente con `400 Bad Request`.
+  2. **Flujo Híbrido de Creación en 3 Pasos (`OrderService.placeOrder`)**:
+     - **Paso A (*Fast-Fail Concurrency Lock en Redis*)**: Intenta adquirir un *distributed lock* efímero (`IN_FLIGHT_LOCK_TTL = 30s`) vía `SET idempotency:orders:<uuid> <timestamp> NX EX 30`. Si el *lock* ya está tomado por otra petición en vuelo, falla inmediatamente con `409 Conflict` (`DuplicateOrderException` -> `"Order is currently being processed"`).
+     - **Paso B (*Safe Replay + Validación Stripe-style de Payload Mismatch en PostgreSQL*)**: Con el *lock* adquirido, consulta `orderRepositoryPort.findByIdempotencyKey(key)`. Si la orden ya existe en la base de datos:
+       - **Payload Mismatch Guard (`request_hash` SHA-256)**: Compara el hash SHA-256 determinístico del *payload* entrante (`userId`, `instrumentId`, `side`, `type`, `quantity`, `amount`, `price`) contra el `request_hash` persistido en la orden original. Si difieren (p. ej. el cliente reutilizó la clave cambiando `quantity` o `amount`), rechaza de inmediato con `400 Bad Request` (`IdempotencyMismatchException`: `"Keys for idempotent requests can only be used with the same parameters they were first used with"`), siguiendo el estándar de Stripe para prevenir fraude o *bugs* de *frontend*.
+       - **Safe Replay**: Si el hash coincide, **retorna de inmediato la orden persistida (`OrderApi` original con su ID y datetime)** sin re-ejecutar estrategias ni duplicar transacciones.
+     - **Paso C (*Ejecución de Negocio y Persistencia ACID*)**: Si la orden no existía, ejecuta la estrategia correspondiente y persiste la orden junto con su `idempotency_key` (`CONSTRAINT uq_orders_idempotency_key UNIQUE`) y su `request_hash` (`VARCHAR(256)`) en PostgreSQL.
+     - **Liberación Determinística (`finally`)**: Al finalizar el bloque (tanto tras *Safe Replay*, creación exitosa o excepción), libera el *lock* en Redis (`DEL`). Redis actúa como **semáforo de concurrencia en vuelo**, y PostgreSQL como **fuente de verdad permanente para Safe Replay**.
+  3. **Cancelación Idempotente (`POST /orders/{orderId}/cancel`)**:
+     - Si la orden está en `NEW` $\rightarrow$ transiciona a `CANCELLED`, persiste en PostgreSQL, incrementa la métrica en Micrometer y retorna `200 OK`.
+     - Si la orden **ya está en `CANCELLED`** $\rightarrow$ retorna inmediatamente `200 OK` con la orden cancelada (*Idempotent Replay*), sin re-guardar en base de datos ni duplicar métricas.
+     - Si la orden está en un estado terminal incompatible (`FILLED` o `REJECTED`) $\rightarrow$ lanza `InvalidOrderStateException` (`409 Conflict`).
 
 ---
 
@@ -341,7 +343,10 @@ curl --location 'http://localhost:8080/instruments?ticker=MOLI&name=Molinos'
 ```
 
 ### 3. Enviar una Orden al Mercado (`POST /orders`)
-> **Nota de Idempotencia**: Todos los *requests* a `POST /orders` requieren el *header* obligatorio `Idempotency-Key` con un `UUID` único por operación (almacenado en Redis con un TTL de 24 horas). Enviar dos veces el mismo `Idempotency-Key` retorna `409 Conflict` (`Duplicate Order`).
+> **Nota de True Idempotency**: Todos los *requests* a `POST /orders` requieren el *header* obligatorio `Idempotency-Key` con un `UUID` único por operación.
+> - Si un cliente reintenta la petición tras un timeout con el mismo `Idempotency-Key` y el **mismo payload**, la API ejecuta un **Safe Replay** retornando la orden existente creada originalmente (`201 Created` con el mismo ID y timestamp) sin duplicar cargos ni órdenes.
+> - Si un cliente reutiliza un `Idempotency-Key` **modificando parámetros del payload** (por ejemplo, `quantity`, `amount` o `price`), la API detecta la discrepancia mediante `request_hash` (SHA-256) y responde `400 Bad Request` (`"Keys for idempotent requests can only be used with the same parameters they were first used with"`).
+> - Si dos peticiones idénticas colisionan simultáneamente en el mismo milisegundo mientras la primera está en vuelo, la segunda es rechazada inmediatamente con `409 Conflict` (`"Order is currently being processed"`).
 
 #### A. Orden `MARKET` de Compra (`BUY`) por Cantidad Exacta de Acciones (`quantity`)
 ```bash
@@ -487,7 +492,10 @@ curl --location 'http://localhost:8080/orders' \
 ```
 
 ### 4. Cancelar una Orden Pendiente (`POST /orders/{orderId}/cancel`)
-Solo las órdenes con estado `NEW` pueden ser transicionadas a `CANCELLED`:
+Permite cancelar una orden pendiente (`NEW`) de forma idempotente:
+- Si la orden está en estado `NEW`, transiciona a `CANCELLED` y retorna `200 OK`.
+- Si la orden **ya fue cancelada**, retorna `200 OK` con la orden cancelada (*Idempotent Replay* seguro).
+- Si la orden está en estado terminal `FILLED` o `REJECTED`, retorna `409 Conflict` (`Invalid Order State`).
 ```bash
 curl --location --request POST 'http://localhost:8080/orders/5/cancel'
 ```
