@@ -149,7 +149,7 @@ public class PortfolioService implements GetPortfolioUseCase {
      */
     private static final class PositionAccumulator {
         private final InstrumentJpaEntity instrument;
-        private int quantity = 0;
+        private long quantity = 0L;
         private BigDecimal totalCostBasis = BigDecimal.ZERO;
         private BigDecimal averageCost = BigDecimal.ZERO;
 
@@ -170,7 +170,7 @@ public class PortfolioService implements GetPortfolioUseCase {
             } else if (order.getSide() == OrderSide.SELL) {
                 quantity -= order.getQuantity();
                 if (quantity <= 0) {
-                    quantity = 0;
+                    quantity = 0L;
                     totalCostBasis = BigDecimal.ZERO;
                     averageCost = BigDecimal.ZERO;
                 } else {

@@ -125,7 +125,7 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
                                                 OrderStatus.FILLED);
                 MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(
                                 filledTradeOrders, filledTransferOrders);
-                int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledTradeOrders,
+                long availableShares = AccountLedgerCalculator.calculateAvailableShares(filledTradeOrders,
                                 instrument.getId());
 
                 OrderExecutionContext context = new OrderExecutionContext(

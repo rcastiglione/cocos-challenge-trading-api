@@ -209,7 +209,7 @@ class OrderServiceTest {
                                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                                 .side(OrderSide.SELL)
                                 .type(OrderType.MARKET)
-                                .quantity(50)
+                                .quantity(50L)
                                 .build();
 
                 when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
@@ -243,7 +243,7 @@ class OrderServiceTest {
                                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                                 .side(OrderSide.BUY)
                                 .type(OrderType.LIMIT)
-                                .quantity(10)
+                                .quantity(10L)
                                 .price(MonetaryAmount.ars("900.00"))
                                 .build();
 
@@ -278,7 +278,7 @@ class OrderServiceTest {
                                 .id(50L)
                                 .user(TradingFixtures.defaultUser())
                                 .instrument(TradingFixtures.pampInstrument())
-                                .quantity(10)
+                                .quantity(10L)
                                 .price(new BigDecimal("900.00"))
                                 .type(OrderType.LIMIT)
                                 .side(OrderSide.BUY)
@@ -444,7 +444,7 @@ class OrderServiceTest {
                                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                                 .side(OrderSide.BUY)
                                 .type(OrderType.MARKET)
-                                .quantity(10)
+                                .quantity(10L)
                                 .build();
 
                 when(idempotencyRepositoryPort.tryAcquire(duplicateKey, OrderService.IN_FLIGHT_LOCK_TTL))
@@ -471,7 +471,7 @@ class OrderServiceTest {
                                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                                 .side(OrderSide.BUY)
                                 .type(OrderType.MARKET)
-                                .quantity(10)
+                                .quantity(10L)
                                 .build();
 
                 OrderJpaEntity existingOrder = TradeOrderJpaEntity.builder()
@@ -480,7 +480,7 @@ class OrderServiceTest {
                                 .requestHash(RequestHashUtils.sha256(command))
                                 .user(TradingFixtures.defaultUser())
                                 .instrument(TradingFixtures.pampInstrument())
-                                .quantity(10)
+                                .quantity(10L)
                                 .price(new BigDecimal("925.85"))
                                 .type(OrderType.MARKET)
                                 .side(OrderSide.BUY)
@@ -516,7 +516,7 @@ class OrderServiceTest {
                                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                                 .side(OrderSide.BUY)
                                 .type(OrderType.MARKET)
-                                .quantity(10)
+                                .quantity(10L)
                                 .build();
 
                 PlaceOrderCommand modifiedCommand = PlaceOrderCommand.builder()
@@ -525,7 +525,7 @@ class OrderServiceTest {
                                 .instrumentId(TradingFixtures.PAMP_INSTRUMENT_ID)
                                 .side(OrderSide.BUY)
                                 .type(OrderType.MARKET)
-                                .quantity(25)
+                                .quantity(25L)
                                 .build();
 
                 OrderJpaEntity existingOrder = TradeOrderJpaEntity.builder()
@@ -534,7 +534,7 @@ class OrderServiceTest {
                                 .requestHash(RequestHashUtils.sha256(originalCommand))
                                 .user(TradingFixtures.defaultUser())
                                 .instrument(TradingFixtures.pampInstrument())
-                                .quantity(10)
+                                .quantity(10L)
                                 .price(new BigDecimal("925.85"))
                                 .type(OrderType.MARKET)
                                 .side(OrderSide.BUY)

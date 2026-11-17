@@ -106,7 +106,7 @@ class PortfolioLifecycleIT extends TradingApplicationIT {
         orderRepository.save(TransferOrderJpaEntity.builder()
                 .instrument(arsInstrument)
                 .user(savedUser)
-                .quantity(100_000)
+                .quantity(100_000L)
                 .price(new BigDecimal("1.00"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_IN)
@@ -125,7 +125,7 @@ class PortfolioLifecycleIT extends TradingApplicationIT {
         assertTrue(initialPortfolio.positions().isEmpty());
 
         // 2. Execute MARKET BUY
-        int buyQuantity = 10;
+        long buyQuantity = 10L;
         MonetaryAmount expectedCost = PAMP_CLOSE_PRICE.multiply(buyQuantity);
         MonetaryAmount expectedCash = INITIAL_CASH.subtract(expectedCost);
 
@@ -162,9 +162,9 @@ class PortfolioLifecycleIT extends TradingApplicationIT {
     @Test
     @DisplayName("Scenario B: Market Sell decreases position quantity, increases availableCash proportionally, and keeps totalAccountValue consistent")
     void scenarioB_marketSellUpdatesPortfolio() throws Exception {
-        int buyQuantity = 10;
-        int sellQuantity = 4;
-        int remainingQuantity = buyQuantity - sellQuantity;
+        long buyQuantity = 10L;
+        long sellQuantity = 4L;
+        long remainingQuantity = buyQuantity - sellQuantity;
 
         OrderCreateRequestApi buyRequest = new TradeOrderRequestApi(
                 savedUser.getId(),
@@ -285,7 +285,7 @@ class PortfolioLifecycleIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.MARKET,
-                200,
+                200L,
                 null,
                 null);
 

@@ -37,9 +37,9 @@ public final class AccountLedgerCalculator {
      * @return Maximum integer quantity of shares
      *         ({@code floor(amount / unitPrice)}).
      */
-    public static int calculateMaxShareQuantity(MonetaryAmount amount, MonetaryAmount unitPrice) {
+    public static long calculateMaxShareQuantity(MonetaryAmount amount, MonetaryAmount unitPrice) {
         if (amount == null || unitPrice == null) {
-            return 0;
+            return 0L;
         }
         return amount.divideToIntegralShares(unitPrice);
     }
@@ -159,11 +159,11 @@ public final class AccountLedgerCalculator {
      * @param instrumentId      The target instrument ID.
      * @return Net share quantity held.
      */
-    public static int calculateAvailableShares(List<TradeOrderJpaEntity> filledTradeOrders, Long instrumentId) {
+    public static long calculateAvailableShares(List<TradeOrderJpaEntity> filledTradeOrders, Long instrumentId) {
         if (filledTradeOrders == null || instrumentId == null) {
-            return 0;
+            return 0L;
         }
-        int shares = 0;
+        long shares = 0L;
         for (TradeOrderJpaEntity tradeOrder : filledTradeOrders) {
             if (tradeOrder.getInstrument() == null
                     || !instrumentId.equals(tradeOrder.getInstrument().getId())

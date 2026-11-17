@@ -57,7 +57,7 @@ public class CashTransferExecutionStrategy implements OrderExecutionStrategy {
         MonetaryAmount transferAmount = command.amount();
         validateCashWithdrawal(context, transferAmount);
 
-        int resolvedUnits = AccountLedgerCalculator.calculateMaxShareQuantity(
+        long resolvedUnits = AccountLedgerCalculator.calculateMaxShareQuantity(
                 transferAmount,
                 AccountLedgerCalculator.UNIT_CASH_PRICE
         );

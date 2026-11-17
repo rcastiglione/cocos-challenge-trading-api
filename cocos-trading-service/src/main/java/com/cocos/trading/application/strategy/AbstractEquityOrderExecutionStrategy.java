@@ -50,7 +50,7 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
         }
 
         MonetaryAmount executionPrice = resolveExecutionPrice(context);
-        int resolvedQuantity = resolveShareQuantity(command, executionPrice);
+        long resolvedQuantity = resolveShareQuantity(command, executionPrice);
         OrderStatus status = determineStatus(context, executionPrice, resolvedQuantity);
 
         return TradeOrderJpaEntity.builder()
@@ -66,20 +66,20 @@ public abstract class AbstractEquityOrderExecutionStrategy implements OrderExecu
                 .build();
     }
 
-    private int resolveShareQuantity(PlaceOrderCommand command, MonetaryAmount executionPrice) {
+    private long resolveShareQuantity(PlaceOrderCommand command, MonetaryAmount executionPrice) {
         if (command.quantity() != null && command.quantity() > 0) {
             return command.quantity();
         }
         if (command.amount() != null && command.amount().isPositive()) {
             return AccountLedgerCalculator.calculateMaxShareQuantity(command.amount(), executionPrice);
         }
-        return 0;
+        return 0L;
     }
 
     private OrderStatus determineStatus(
             OrderExecutionContext context,
             MonetaryAmount executionPrice,
-            int resolvedQuantity) {
+            long resolvedQuantity) {
         if (resolvedQuantity <= 0) {
             return OrderStatus.REJECTED;
         }

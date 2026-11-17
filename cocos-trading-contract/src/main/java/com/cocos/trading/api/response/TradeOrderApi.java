@@ -34,7 +34,7 @@ public record TradeOrderApi(
         InstrumentSummaryApi instrument,
 
         @Schema(description = "Quantity of whole shares traded", example = "10")
-        Integer quantity,
+        Long quantity,
 
         @Schema(description = "Execution or limit unit price in ARS")
         MonetaryAmount price,

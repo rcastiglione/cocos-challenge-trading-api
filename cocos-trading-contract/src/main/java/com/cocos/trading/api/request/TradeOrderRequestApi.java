@@ -38,7 +38,7 @@ public record TradeOrderRequestApi(
         OrderTypeApi type,
 
         @Schema(description = "Exact quantity of shares to trade (mutually exclusive with amount)", example = "10")
-        Integer quantity,
+        Long quantity,
 
         @Schema(description = "Total investment amount in ARS (automatically calculates maximum whole shares; mutually exclusive with quantity)")
         MonetaryAmount amount,

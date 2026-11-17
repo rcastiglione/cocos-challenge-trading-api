@@ -87,7 +87,7 @@ public class OrderCreateRequestValidator implements Validator {
             );
         }
 
-        ValidatorUtils.validatePositiveInteger(
+        ValidatorUtils.validatePositiveLong(
                 errors,
                 request.quantity(),
                 "quantity",

@@ -100,7 +100,7 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static TransferOrderJpaEntity cashInOrder(Long id, int amount) {
+    public static TransferOrderJpaEntity cashInOrder(Long id, long amount) {
         return TransferOrderJpaEntity.builder()
                 .id(id)
                 .user(defaultUser())
@@ -114,7 +114,7 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static TransferOrderJpaEntity cashOutOrder(Long id, int amount) {
+    public static TransferOrderJpaEntity cashOutOrder(Long id, long amount) {
         return TransferOrderJpaEntity.builder()
                 .id(id)
                 .user(defaultUser())
@@ -128,7 +128,7 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static TradeOrderJpaEntity filledBuyOrder(Long id, Long instrumentId, int quantity, String price) {
+    public static TradeOrderJpaEntity filledBuyOrder(Long id, Long instrumentId, long quantity, String price) {
         return TradeOrderJpaEntity.builder()
                 .id(id)
                 .user(defaultUser())
@@ -142,7 +142,7 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static TradeOrderJpaEntity filledSellOrder(Long id, Long instrumentId, int quantity, String price) {
+    public static TradeOrderJpaEntity filledSellOrder(Long id, Long instrumentId, long quantity, String price) {
         return TradeOrderJpaEntity.builder()
                 .id(id)
                 .user(defaultUser())
@@ -156,7 +156,7 @@ public final class TradingFixtures {
                 .build();
     }
 
-    public static PlaceOrderCommand marketBuyByQuantity(int quantity) {
+    public static PlaceOrderCommand marketBuyByQuantity(long quantity) {
         return PlaceOrderCommand.builder()
                 .idempotencyKey(UUID.randomUUID())
                 .userId(DEFAULT_USER_ID)

@@ -22,7 +22,7 @@ public record AssetPositionApi(
         InstrumentSummaryApi instrument,
 
         @Schema(description = "Net quantity of shares held", example = "298")
-        Integer quantity,
+        Long quantity,
 
         @Schema(description = "Latest market close price in ARS")
         MonetaryAmount lastPrice,

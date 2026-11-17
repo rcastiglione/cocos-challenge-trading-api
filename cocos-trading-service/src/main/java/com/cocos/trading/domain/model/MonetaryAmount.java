@@ -98,7 +98,7 @@ public record MonetaryAmount(BigDecimal amount, String currency) {
      * @param quantity Share or unit quantity.
      * @return Multiplied {@link MonetaryAmount} in the same currency.
      */
-    public MonetaryAmount multiply(int quantity) {
+    public MonetaryAmount multiply(long quantity) {
         return new MonetaryAmount(this.amount.multiply(BigDecimal.valueOf(quantity)), this.currency);
     }
 
@@ -131,15 +131,15 @@ public record MonetaryAmount(BigDecimal amount, String currency) {
      * @param unitPrice Price per share/unit in the same currency.
      * @return Maximum integer number of whole shares.
      */
-    public int divideToIntegralShares(MonetaryAmount unitPrice) {
+    public long divideToIntegralShares(MonetaryAmount unitPrice) {
         if (unitPrice == null) {
-            return 0;
+            return 0L;
         }
         assertSameCurrency(unitPrice);
         if (!this.isPositive() || !unitPrice.isPositive()) {
-            return 0;
+            return 0L;
         }
-        return this.amount.divideToIntegralValue(unitPrice.amount).intValueExact();
+        return this.amount.divideToIntegralValue(unitPrice.amount).longValueExact();
     }
 
     /**

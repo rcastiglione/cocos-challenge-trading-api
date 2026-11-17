@@ -17,7 +17,7 @@ import lombok.Builder;
 @Builder
 public record AssetPosition(
         InstrumentJpaEntity instrument,
-        Integer quantity,
+        Long quantity,
         MonetaryAmount lastPrice,
         MonetaryAmount marketValue,
         BigDecimal totalReturnPercentage,

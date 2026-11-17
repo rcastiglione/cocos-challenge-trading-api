@@ -87,7 +87,7 @@ class PortfolioServiceTest {
 
         AssetPosition pampPosition = portfolio.positions().getFirst();
         assertEquals("PAMP", pampPosition.instrument().getTicker());
-        assertEquals(80, pampPosition.quantity());
+        assertEquals(80L, pampPosition.quantity());
         assertEquals(MonetaryAmount.ars("925.85"), pampPosition.lastPrice());
         assertEquals(MonetaryAmount.ars("74068.00"), pampPosition.marketValue());
         assertEquals(new BigDecimal("15.73"), pampPosition.totalReturnPercentage());

@@ -179,6 +179,12 @@ cocos-challenge-trading-api/
 
 ---
 
+### 3.10. SRE & High-Nominality Risks (Protección contra Integer Overflow & Hiperinflación)
+- **Nominales en 64-bit (`Long` / `BIGINT`)**: En Java, `Integer.MAX_VALUE` (`~2.14 * 10^9`) representa un riesgo sistémico en mercados de alta nominalidad como el argentino. Inversores institucionales o *whales* operando *penny stocks* (ej. **COME** — *Sociedad Comercial del Plata*) o bonos soberanos altamente líquidos (ej. **AL30** / **AL29**) pueden superar fácilmente los `2.14` mil millones de nominales en órdenes individuales o posiciones acumuladas. Para prevenir *Integer Overflow* silencioso y errores `integer out of range` en PostgreSQL, `quantity` se tipa como **`Long`** de punta a punta (contrato DTOs, `OrderJpaEntity`, `AccountLedgerCalculator`, `PortfolioService` y estrategias) respaldado por la migración **`V4__widen_orders_size_to_bigint.sql`** (`orders.size` -> `BIGINT`).
+- **Advertencia para Esquemas Futuros (`NUMERIC(38, 4)` vs `NUMERIC(19, 2)`)**: Para futuros diseños de base de datos o nuevas tablas contables, se recomienda utilizar **`NUMERIC(38, 4)`** en lugar de `NUMERIC(19, 2)` (y muy por encima del `NUMERIC(10, 2)` heredado del esquema V1) para *future-proof* el *ledger* frente a agregaciones de volumen en escenarios hiperinflacionarios y conservar precisión sub-centavo en cálculos intermedios.
+
+---
+
 ## 4. Estrategia de Entornos (`Spring Profiles`), Inicialización de Base de Datos & Ejecución
 
 La aplicación implementa tres perfiles de Spring Boot para garantizar aislamiento y paridad total de motor PostgreSQL entre pruebas de integración, desarrollo local y la base en la nube del challenge:

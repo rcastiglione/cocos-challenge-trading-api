@@ -33,7 +33,7 @@ public record PlaceOrderCommand(
                 Long instrumentId,
                 OrderSide side,
                 OrderType type,
-                Integer quantity,
+                Long quantity,
                 MonetaryAmount amount,
                 MonetaryAmount price) {
 }

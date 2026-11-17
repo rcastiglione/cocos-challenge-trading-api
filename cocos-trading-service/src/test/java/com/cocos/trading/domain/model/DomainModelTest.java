@@ -27,21 +27,21 @@ class DomainModelTest {
     @DisplayName("Should calculate maximum whole shares from investment amount without fractions via AccountLedgerCalculator")
     void shouldCalculateMaxShareQuantityWithoutFractions() {
         // 10,000 ARS / 925.85 ARS per share = 10.8008... -> 10 whole shares
-        int shares = AccountLedgerCalculator.calculateMaxShareQuantity(
+        long shares = AccountLedgerCalculator.calculateMaxShareQuantity(
                 MonetaryAmount.ars("10000.00"),
                 MonetaryAmount.ars("925.85")
         );
-        assertEquals(10, shares);
+        assertEquals(10L, shares);
     }
 
     @Test
     @DisplayName("Should return 0 shares when investment amount is smaller than unit price")
     void shouldReturnZeroSharesWhenAmountLessThanUnitPrice() {
-        int shares = AccountLedgerCalculator.calculateMaxShareQuantity(
+        long shares = AccountLedgerCalculator.calculateMaxShareQuantity(
                 MonetaryAmount.ars("500.00"),
                 MonetaryAmount.ars("925.85")
         );
-        assertEquals(0, shares);
+        assertEquals(0L, shares);
     }
 
     @Test
@@ -69,7 +69,7 @@ class DomainModelTest {
                 .id(10L)
                 .user(TradingFixtures.defaultUser())
                 .instrument(TradingFixtures.pampInstrument())
-                .quantity(5)
+                .quantity(5L)
                 .price(new BigDecimal("900.00"))
                 .type(OrderType.LIMIT)
                 .side(OrderSide.BUY)
@@ -81,7 +81,7 @@ class DomainModelTest {
                 .id(11L)
                 .user(TradingFixtures.defaultUser())
                 .instrument(TradingFixtures.arsInstrument())
-                .quantity(50000)
+                .quantity(50000L)
                 .price(new BigDecimal("1.00"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_IN)
@@ -101,7 +101,7 @@ class DomainModelTest {
                 .id(105L)
                 .user(TradingFixtures.defaultUser())
                 .instrument(TradingFixtures.pampInstrument())
-                .quantity(10)
+                .quantity(10L)
                 .price(new BigDecimal("925.85"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.BUY)
@@ -116,7 +116,7 @@ class DomainModelTest {
         assertEquals("10001", tradeOrderApi.user().accountNumber());
         assertEquals(47L, tradeOrderApi.instrument().id());
         assertEquals("PAMP", tradeOrderApi.instrument().ticker());
-        assertEquals(10, tradeOrderApi.quantity());
+        assertEquals(10L, tradeOrderApi.quantity());
         assertEquals(new BigDecimal("925.85"), tradeOrderApi.price().amount());
         assertEquals("ARS", tradeOrderApi.price().currency());
         assertEquals("2024-06-15T14:30:00Z", tradeOrderApi.datetime());
@@ -125,7 +125,7 @@ class DomainModelTest {
                 .id(106L)
                 .user(TradingFixtures.defaultUser())
                 .instrument(TradingFixtures.arsInstrument())
-                .quantity(50_000)
+                .quantity(50_000L)
                 .price(new BigDecimal("1.00"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_IN)

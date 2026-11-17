@@ -125,7 +125,7 @@ public final class ValidatorUtils {
     }
 
     /**
-     * Rejects an {@link Integer} field if it is less than or equal to zero.
+     * Rejects a {@link Long} field if it is less than or equal to zero.
      *
      * @param errors         Spring {@link Errors} collector.
      * @param value          Value to inspect.
@@ -133,9 +133,9 @@ public final class ValidatorUtils {
      * @param errorCode      Validation error code.
      * @param defaultMessage Human-readable error message.
      */
-    public static void validatePositiveInteger(
+    public static void validatePositiveLong(
             Errors errors,
-            Integer value,
+            Long value,
             String field,
             String errorCode,
             String defaultMessage

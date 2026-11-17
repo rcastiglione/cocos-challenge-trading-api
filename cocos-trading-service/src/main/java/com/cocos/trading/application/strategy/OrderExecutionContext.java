@@ -24,6 +24,6 @@ public record OrderExecutionContext(
         InstrumentJpaEntity instrument,
         Optional<MarketDataJpaEntity> latestMarketData,
         MonetaryAmount availableCash,
-        int availableShares
+        long availableShares
 ) {
 }

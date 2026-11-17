@@ -119,7 +119,7 @@ class OrderControllerIT extends TradingApplicationIT {
         orderRepository.save(TransferOrderJpaEntity.builder()
                 .instrument(arsInstrument)
                 .user(savedUser)
-                .quantity(50_000)
+                .quantity(50_000L)
                 .price(new BigDecimal("1.00"))
                 .type(OrderType.MARKET)
                 .side(OrderSide.CASH_IN)
@@ -136,7 +136,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.MARKET,
-                10,
+                10L,
                 null,
                 null
         );
@@ -204,7 +204,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.MARKET,
-                100,
+                100L,
                 null,
                 null
         );
@@ -224,7 +224,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 OrderStatus.REJECTED
         );
         assertEquals(1, rejectedOrders.size());
-        assertEquals(100, rejectedOrders.getFirst().getQuantity());
+        assertEquals(100L, rejectedOrders.getFirst().getQuantity());
     }
 
     @Test
@@ -236,7 +236,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.SELL,
                 OrderTypeApi.MARKET,
-                5,
+                5L,
                 null,
                 null
         );
@@ -258,7 +258,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.LIMIT,
-                10,
+                10L,
                 null,
                 MonetaryAmount.ars(new BigDecimal("900.00"))
         );
@@ -316,7 +316,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.LIMIT,
-                10,
+                10L,
                 null,
                 null
         );
@@ -333,7 +333,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.LIMIT,
-                10,
+                10L,
                 null,
                 new MonetaryAmount(new BigDecimal("900.00"), "USD")
         );
@@ -354,7 +354,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.MARKET,
-                5,
+                5L,
                 null,
                 null
         );
@@ -469,7 +469,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.MARKET,
-                5,
+                5L,
                 null,
                 null
         );
@@ -571,7 +571,7 @@ class OrderControllerIT extends TradingApplicationIT {
                 pampInstrument.getId(),
                 OrderSideApi.BUY,
                 OrderTypeApi.MARKET,
-                10,
+                10L,
                 null,
                 null
         );
