@@ -3,6 +3,8 @@ package com.cocos.trading.repository;
 import com.cocos.trading.application.port.out.OrderRepositoryPort;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import com.cocos.trading.repository.jpa.SpringDataOrderRepository;
 import java.util.List;
 import java.util.Optional;
@@ -37,5 +39,15 @@ public class OrderRepositoryAdapter implements OrderRepositoryPort {
     @Override
     public List<OrderJpaEntity> findByUserIdAndStatus(Long userId, OrderStatus status) {
         return springDataOrderRepository.findByUserIdAndStatusOrderByDatetimeAscIdAsc(userId, status);
+    }
+
+    @Override
+    public List<TradeOrderJpaEntity> findTradeOrdersByUserIdAndStatus(Long userId, OrderStatus status) {
+        return springDataOrderRepository.findTradeOrdersByUserIdAndStatus(userId, status);
+    }
+
+    @Override
+    public List<TransferOrderJpaEntity> findTransferOrdersByUserIdAndStatus(Long userId, OrderStatus status) {
+        return springDataOrderRepository.findTransferOrdersByUserIdAndStatus(userId, status);
     }
 }

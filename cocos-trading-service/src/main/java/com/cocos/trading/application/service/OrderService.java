@@ -21,6 +21,8 @@ import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.entity.MarketDataJpaEntity;
 import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import com.cocos.trading.repository.entity.UserJpaEntity;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
@@ -115,10 +117,15 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
                                 ? Optional.empty()
                                 : marketDataRepositoryPort.findLatestByInstrumentId(instrument.getId());
 
-                List<OrderJpaEntity> filledOrders = orderRepositoryPort.findByUserIdAndStatus(command.userId(),
-                                OrderStatus.FILLED);
-                MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
-                int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledOrders,
+                List<TradeOrderJpaEntity> filledTradeOrders =
+                                orderRepositoryPort.findTradeOrdersByUserIdAndStatus(command.userId(),
+                                                OrderStatus.FILLED);
+                List<TransferOrderJpaEntity> filledTransferOrders =
+                                orderRepositoryPort.findTransferOrdersByUserIdAndStatus(command.userId(),
+                                                OrderStatus.FILLED);
+                MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(
+                                filledTradeOrders, filledTransferOrders);
+                int availableShares = AccountLedgerCalculator.calculateAvailableShares(filledTradeOrders,
                                 instrument.getId());
 
                 OrderExecutionContext context = new OrderExecutionContext(

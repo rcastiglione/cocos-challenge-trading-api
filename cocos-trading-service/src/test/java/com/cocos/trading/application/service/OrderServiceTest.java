@@ -113,7 +113,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
                 when(marketDataRepositoryPort.findLatestByInstrumentId(TradingFixtures.PAMP_INSTRUMENT_ID))
                                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -157,7 +157,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
                 when(marketDataRepositoryPort.findLatestByInstrumentId(TradingFixtures.PAMP_INSTRUMENT_ID))
                                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -182,7 +182,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
                 when(marketDataRepositoryPort.findLatestByInstrumentId(TradingFixtures.PAMP_INSTRUMENT_ID))
                                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 10_000)));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -219,11 +219,13 @@ class OrderServiceTest {
                 when(marketDataRepositoryPort.findLatestByInstrumentId(TradingFixtures.PAMP_INSTRUMENT_ID))
                                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
                 // User only holds 10 shares of PAMP
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
-                                .thenReturn(List.of(
-                                                TradingFixtures.cashInOrder(1L, 50_000),
-                                                TradingFixtures.filledBuyOrder(2L, TradingFixtures.PAMP_INSTRUMENT_ID,
-                                                                10, "800.00")));
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(
+                                TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                                .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
+                when(orderRepositoryPort.findTradeOrdersByUserIdAndStatus(
+                                TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                                .thenReturn(List.of(TradingFixtures.filledBuyOrder(
+                                                2L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "800.00")));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -251,7 +253,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
                 when(marketDataRepositoryPort.findLatestByInstrumentId(TradingFixtures.PAMP_INSTRUMENT_ID))
                                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 20_000)));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -328,7 +330,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
                 when(marketDataRepositoryPort.findLatestByInstrumentId(TradingFixtures.PAMP_INSTRUMENT_ID))
                                 .thenReturn(Optional.of(TradingFixtures.pampMarketData()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -386,7 +388,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
                 when(instrumentRepositoryPort.findByTicker("ARS"))
                                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -422,7 +424,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
                 when(instrumentRepositoryPort.findByTicker("ARS"))
                                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
 
                 BusinessRuleViolationException exception = assertThrows(
@@ -578,7 +580,7 @@ class OrderServiceTest {
                                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
                 when(instrumentRepositoryPort.findByTicker("ARS"))
                                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
-                when(orderRepositoryPort.findByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
+                when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(TradingFixtures.DEFAULT_USER_ID, OrderStatus.FILLED))
                                 .thenReturn(List.of(TradingFixtures.cashInOrder(1L, 50_000)));
                 when(orderRepositoryPort.save(any(OrderJpaEntity.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));

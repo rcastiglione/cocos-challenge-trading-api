@@ -14,7 +14,8 @@ import com.cocos.trading.domain.model.MonetaryAmount;
 import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.Portfolio;
 import com.cocos.trading.fixture.TradingFixtures;
-import com.cocos.trading.repository.entity.OrderJpaEntity;
+import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -57,15 +58,20 @@ class PortfolioServiceTest {
         // Total Return % = ((925.85 - 800.00) / 800.00) * 100 = 15.73%
         // Total Account Value = 838,000.00 + 74,068.00 = 912,068.00 ARS
         Long userId = TradingFixtures.DEFAULT_USER_ID;
-        List<OrderJpaEntity> filledOrders = List.of(
-                TradingFixtures.cashInOrder(1L, 1_000_000),
-                TradingFixtures.cashOutOrder(2L, 100_000),
+        List<TradeOrderJpaEntity> filledTradeOrders = List.of(
                 TradingFixtures.filledBuyOrder(3L, TradingFixtures.PAMP_INSTRUMENT_ID, 100, "800.00"),
                 TradingFixtures.filledSellOrder(4L, TradingFixtures.PAMP_INSTRUMENT_ID, 20, "900.00")
         );
+        List<TransferOrderJpaEntity> filledTransferOrders = List.of(
+                TradingFixtures.cashInOrder(1L, 1_000_000),
+                TradingFixtures.cashOutOrder(2L, 100_000)
+        );
 
         when(userRepositoryPort.findById(userId)).thenReturn(Optional.of(TradingFixtures.defaultUser()));
-        when(orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED)).thenReturn(filledOrders);
+        when(orderRepositoryPort.findTradeOrdersByUserIdAndStatus(userId, OrderStatus.FILLED))
+                .thenReturn(filledTradeOrders);
+        when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(userId, OrderStatus.FILLED))
+                .thenReturn(filledTransferOrders);
         when(marketDataRepositoryPort.findLatestByInstrumentIds(Set.of(TradingFixtures.PAMP_INSTRUMENT_ID)))
                 .thenReturn(Map.of(TradingFixtures.PAMP_INSTRUMENT_ID, TradingFixtures.pampMarketData()));
 
@@ -92,14 +98,19 @@ class PortfolioServiceTest {
     @DisplayName("Should exclude closed positions where net share quantity is zero")
     void shouldExcludeClosedPositions() {
         Long userId = TradingFixtures.DEFAULT_USER_ID;
-        List<OrderJpaEntity> filledOrders = List.of(
-                TradingFixtures.cashInOrder(1L, 100_000),
+        List<TradeOrderJpaEntity> filledTradeOrders = List.of(
                 TradingFixtures.filledBuyOrder(2L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "800.00"),
                 TradingFixtures.filledSellOrder(3L, TradingFixtures.PAMP_INSTRUMENT_ID, 10, "850.00")
         );
+        List<TransferOrderJpaEntity> filledTransferOrders = List.of(
+                TradingFixtures.cashInOrder(1L, 100_000)
+        );
 
         when(userRepositoryPort.findById(userId)).thenReturn(Optional.of(TradingFixtures.defaultUser()));
-        when(orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED)).thenReturn(filledOrders);
+        when(orderRepositoryPort.findTradeOrdersByUserIdAndStatus(userId, OrderStatus.FILLED))
+                .thenReturn(filledTradeOrders);
+        when(orderRepositoryPort.findTransferOrdersByUserIdAndStatus(userId, OrderStatus.FILLED))
+                .thenReturn(filledTransferOrders);
         when(marketDataRepositoryPort.findLatestByInstrumentIds(Set.of(TradingFixtures.PAMP_INSTRUMENT_ID)))
                 .thenReturn(Map.of(TradingFixtures.PAMP_INSTRUMENT_ID, TradingFixtures.pampMarketData()));
 

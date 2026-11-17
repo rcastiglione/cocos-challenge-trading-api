@@ -93,6 +93,40 @@ public final class AccountLedgerCalculator {
     }
 
     /**
+     * Calculates the net available cash in ARS from typed {@code FILLED} trade and transfer orders.
+     *
+     * @param filledTradeOrders    Chronological list of {@code FILLED} {@link TradeOrderJpaEntity} records.
+     * @param filledTransferOrders Chronological list of {@code FILLED} {@link TransferOrderJpaEntity} records.
+     * @return Net available cash as an {@code ARS} {@link MonetaryAmount}.
+     */
+    public static MonetaryAmount calculateAvailableCash(
+            List<TradeOrderJpaEntity> filledTradeOrders,
+            List<TransferOrderJpaEntity> filledTransferOrders) {
+        MonetaryAmount cash = MonetaryAmount.ZERO_ARS;
+        if (filledTransferOrders != null) {
+            for (TransferOrderJpaEntity transferOrder : filledTransferOrders) {
+                if (transferOrder.getQuantity() == null || transferOrder.getSide() == null) {
+                    continue;
+                }
+                MonetaryAmount total = calculateTotalAmount(transferOrder);
+                MonetaryAmount delta = transferOrder.getSide() == OrderSide.CASH_IN ? total : total.negate();
+                cash = cash.add(delta);
+            }
+        }
+        if (filledTradeOrders != null) {
+            for (TradeOrderJpaEntity tradeOrder : filledTradeOrders) {
+                if (tradeOrder.getQuantity() == null || tradeOrder.getSide() == null || tradeOrder.getPrice() == null) {
+                    continue;
+                }
+                MonetaryAmount total = calculateTotalAmount(tradeOrder);
+                MonetaryAmount delta = tradeOrder.getSide() == OrderSide.SELL ? total : total.negate();
+                cash = cash.add(delta);
+            }
+        }
+        return cash;
+    }
+
+    /**
      * Calculates the net available cash in ARS from all {@code FILLED} orders of a
      * user
      * by summing each order's cash impact via
@@ -121,19 +155,16 @@ public final class AccountLedgerCalculator {
      * instrument
      * from all {@code FILLED} {@link TradeOrderJpaEntity} instances.
      *
-     * @param filledOrders Chronological list of {@code FILLED} orders.
-     * @param instrumentId The target instrument ID.
+     * @param filledTradeOrders Chronological list of {@code FILLED} {@link TradeOrderJpaEntity} orders.
+     * @param instrumentId      The target instrument ID.
      * @return Net share quantity held.
      */
-    public static int calculateAvailableShares(List<OrderJpaEntity> filledOrders, Long instrumentId) {
-        if (filledOrders == null || instrumentId == null) {
+    public static int calculateAvailableShares(List<TradeOrderJpaEntity> filledTradeOrders, Long instrumentId) {
+        if (filledTradeOrders == null || instrumentId == null) {
             return 0;
         }
         int shares = 0;
-        for (OrderJpaEntity order : filledOrders) {
-            if (!(order instanceof TradeOrderJpaEntity tradeOrder)) {
-                continue;
-            }
+        for (TradeOrderJpaEntity tradeOrder : filledTradeOrders) {
             if (tradeOrder.getInstrument() == null
                     || !instrumentId.equals(tradeOrder.getInstrument().getId())
                     || tradeOrder.getQuantity() == null) {

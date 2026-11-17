@@ -13,8 +13,8 @@ import com.cocos.trading.domain.model.OrderStatus;
 import com.cocos.trading.domain.model.Portfolio;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.entity.MarketDataJpaEntity;
-import com.cocos.trading.repository.entity.OrderJpaEntity;
 import com.cocos.trading.repository.entity.TradeOrderJpaEntity;
+import com.cocos.trading.repository.entity.TransferOrderJpaEntity;
 import com.cocos.trading.repository.entity.UserJpaEntity;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -58,11 +58,15 @@ public class PortfolioService implements GetPortfolioUseCase {
         UserJpaEntity user = userRepositoryPort.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
 
-        List<OrderJpaEntity> filledOrders = orderRepositoryPort.findByUserIdAndStatus(userId, OrderStatus.FILLED);
-        MonetaryAmount availableCash = AccountLedgerCalculator.calculateAvailableCash(filledOrders);
+        List<TradeOrderJpaEntity> filledTradeOrders =
+                orderRepositoryPort.findTradeOrdersByUserIdAndStatus(userId, OrderStatus.FILLED);
+        List<TransferOrderJpaEntity> filledTransferOrders =
+                orderRepositoryPort.findTransferOrdersByUserIdAndStatus(userId, OrderStatus.FILLED);
+        MonetaryAmount availableCash =
+                AccountLedgerCalculator.calculateAvailableCash(filledTradeOrders, filledTransferOrders);
 
-        Set<Long> equityInstrumentIds = filledOrders.stream()
-                .map(OrderJpaEntity::getInstrument)
+        Set<Long> equityInstrumentIds = filledTradeOrders.stream()
+                .map(TradeOrderJpaEntity::getInstrument)
                 .filter(Objects::nonNull)
                 .filter(inst -> inst.getType() == InstrumentType.ACCIONES)
                 .map(InstrumentJpaEntity::getId)
@@ -72,10 +76,7 @@ public class PortfolioService implements GetPortfolioUseCase {
                 .findLatestByInstrumentIds(equityInstrumentIds);
 
         Map<Long, PositionAccumulator> accumulators = new LinkedHashMap<>();
-        for (OrderJpaEntity order : filledOrders) {
-            if (!(order instanceof TradeOrderJpaEntity tradeOrder)) {
-                continue;
-            }
+        for (TradeOrderJpaEntity tradeOrder : filledTradeOrders) {
             InstrumentJpaEntity instrument = tradeOrder.getInstrument();
             if (instrument == null || instrument.getType() == InstrumentType.MONEDA) {
                 continue;
