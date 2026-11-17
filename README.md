@@ -1,20 +1,20 @@
 # Cocos Capital — Transactional Trading Engine API
 
-Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, construida con **Java 21**, **Spring Boot 3.3**, **Lombok** y una **Multi-Module Pragmatic Hexagonal Architecture** con aislamiento estricto de contrato (*Framework-Agnostic Contract*).
+Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, construida con **Java 25 (LTS)**, **Spring Boot 4.0**, **Lombok** y una **Multi-Module Pragmatic Hexagonal Architecture** con aislamiento estricto de contrato (*Framework-Agnostic Contract*).
 
 ---
 
 ## 1. Tech Stack
 
-- **Java 21** (*Records*, *Pattern Matching*, *Switch Expressions*, *Virtual Threads*)
-- **Spring Boot 3.3.0** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-data-redis`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`)
+- **Java 25 (LTS)** (*Records*, *Pattern Matching*, *Switch Expressions*, *Virtual Threads*): Adoptado para aprovechar las últimas optimizaciones de la JVM LTS, estabilidad avanzada de **Virtual Threads** (sin *pinning* en bloques `synchronized`) y mejoras de *throughput* y GC.
+- **Spring Boot 4.0.9** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-data-redis`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`, `spring-boot-starter-flyway`): Mantiene el *framework* en el *bleeding edge* sobre Spring Framework 7, Jackson 3 y Jakarta EE 11 con soporte de primera clase para Java 25.
 - **Redis 7 (`redis:7-alpine`)**: *In-Memory Fast-Fail Distributed Lock* para ráfagas concurrentes en vuelo (`IN_FLIGHT_LOCK_TTL = 30s` vía comandos atómicos `SET ... NX EX 30`), previniendo condiciones de carrera y *double-spending* simultáneo
-- **PostgreSQL 16 & Flyway (`flyway-core` + `flyway-database-postgresql`)**: Versionado y migración continua del esquema relacional (`V1__init_schema.sql`, `V2__add_idempotency_key_to_orders.sql`), asegurando **True Idempotency** con *Safe Replay* duradero y validación **Stripe-style Idempotency Mismatch** (`request_hash` SHA-256) respaldados por `CONSTRAINT uq_orders_idempotency_key UNIQUE (idempotency_key)`
+- **PostgreSQL 16 & Flyway (`spring-boot-starter-flyway` + `flyway-database-postgresql`)**: Versionado y migración continua del esquema relacional (`V1__init_schema.sql`, `V2__add_idempotency_key_to_orders.sql`, `V3__add_performance_indexes.sql`), asegurando **True Idempotency** con *Safe Replay* duradero, validación **Stripe-style Idempotency Mismatch** (`request_hash` SHA-256) e índices *non-clustered* para *hot paths* de lectura.
 - **Observability & Telemetry Stack** (*Nice-to-Have SRE Layer*): **Micrometer (`micrometer-registry-prometheus`)**, **Distributed Tracing (`micrometer-tracing-bridge-brave` con W3C `traceId`/`spanId` en logs)**, **Prometheus** y **Grafana** (con *Zero-Touch Auto-Provisioning* de *datasource* y *dashboard* en tiempo real)
 - **Lombok** (`@SuperBuilder`, `@Builder`, `@Getter`, `@RequiredArgsConstructor`, `@Slf4j`) para reducir *boilerplate* en modelos de dominio, *DTOs*, *JPA Entities* y servicios
 - **PostgreSQL 16** (NeonDB cloud PostgreSQL para el perfil `prod`, **Docker Compose** para desarrollo `local`, y **Testcontainers (`PostgreSQLContainer` + `RedisContainer`)** para *functional integration testing* con paridad 100% de infraestructura)
-- **Zalando Problem (`problem-spring-web-starter`)** para respuestas de error estandarizadas bajo **RFC 7807**
-- **SpringDoc OpenAPI 2.5 (Swagger UI)** para documentación interactiva de los *endpoints*
+- **Spring Native `ProblemDetail`** para respuestas de error estandarizadas bajo **RFC 7807** (`application/problem+json`)
+- **SpringDoc OpenAPI 3.0 (Swagger UI)** para documentación interactiva de los *endpoints*
 - **Maven (Multi-Module)** con **Surefire** (*unit tests*), **Failsafe** (`src/it` *integration tests* con Testcontainers), y **JaCoCo** (*code coverage*)
 
 ---
@@ -26,7 +26,7 @@ El repositorio está estructurado en dos módulos Maven para desacoplar completa
 ```text
 cocos-challenge-trading-api/
 ├── pom.xml                                  # Parent / Aggregator POM
-├── Dockerfile                               # Multi-stage Dockerfile (Maven Builder + Corretto 21 Alpine Runtime)
+├── Dockerfile                               # Multi-stage Dockerfile (Maven Builder + Corretto 25 Alpine Runtime)
 ├── docker-compose.yml                       # Orquestación local (PostgreSQL 16 + Redis 7 + Trading API + Prometheus + Grafana)
 ├── docker/
 │   ├── postgres/init.sql                    # DDL Schema + Seed Data inicial para PostgreSQL local
@@ -169,6 +169,16 @@ cocos-challenge-trading-api/
 
 ---
 
+### 3.9. Estandarización UTC / ISO 8601 (`Z`) & Database Performance Indexes (Flyway V3)
+- **Timestamps en UTC (`Z` — Zulu Time)**: `ApiMapper.ISO_DATETIME_FORMATTER` serializa `OrderApi.datetime` bajo el formato estricto `yyyy-MM-dd'T'HH:mm:ss'Z'` (ej. `"2026-11-17T18:57:12Z"`), eliminando ambigüedades de zona horaria entre clientes móviles/web y el motor transaccional.
+- **Índices Non-Clustered (`V3__add_performance_indexes.sql`)**:
+  - `idx_orders_userid_status_datetime_id` sobre `orders (userid, status, datetime ASC, id ASC)` para resolver filtros y ordenamientos de `PortfolioService` y `AccountLedgerCalculator` mediante *Index Scan* ordenado.
+  - `idx_orders_idempotency_key` (*partial unique index* `WHERE idempotency_key IS NOT NULL`) para *lookups* de *Safe Replay*.
+  - `idx_marketdata_instrumentid_date_id` sobre `marketdata (instrumentid, date DESC, id DESC)` para consultas de última cotización (*single* y *batch `IN`*).
+  - `idx_instruments_ticker_lower` (*functional index* `LOWER(ticker)`) e `idx_instruments_ticker` para búsquedas *case-insensitive* (`findByTickerIgnoreCase`).
+
+---
+
 ## 4. Estrategia de Entornos (`Spring Profiles`), Inicialización de Base de Datos & Ejecución
 
 La aplicación implementa tres perfiles de Spring Boot para garantizar aislamiento y paridad total de motor PostgreSQL entre pruebas de integración, desarrollo local y la base en la nube del challenge:
@@ -241,15 +251,17 @@ mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=prod
 
 ---
 
-### 4.4. Ejecutar Unit Tests & Functional Integration Tests (Testcontainers)
-> **Requisito**: Tener **Docker** corriendo localmente para que Testcontainers pueda levantar automáticamente el contenedor efímero `postgres:16-alpine` con el perfil `test`.
+### 4.4. Ejecutar Unit Tests, Functional Integration Tests & JaCoCo Code Coverage
+> **Requisito**: Tener **Docker** corriendo localmente para que Testcontainers pueda levantar automáticamente los contenedores efímeros `postgres:16-alpine` y `redis:7-alpine` con el perfil `test`.
 
 ```bash
 mvn clean verify
 ```
 - **Unit tests** (`*Test.java` en `src/test/java`) se ejecutan vía `maven-surefire-plugin`.
-- **Functional integration tests** (`*IT.java` en `src/it/java`) se ejecutan vía `maven-failsafe-plugin` contra un contenedor real de PostgreSQL 16 gestionado por **Testcontainers**.
-- **Reporte de cobertura JaCoCo**: Se genera automáticamente en `cocos-trading-service/target/site/jacoco/index.html`.
+- **Functional integration tests** (`*IT.java` en `src/it/java`) se ejecutan vía `maven-failsafe-plugin` contra contenedores reales de PostgreSQL 16 y Redis 7 gestionados por **Testcontainers** (incluyendo la ejecución automática de todas las migraciones Flyway `V1`–`V3`).
+- **Reporte de Cobertura JaCoCo (Unit + Integration Tests)**: `jacoco-maven-plugin` instrumenta tanto Surefire como Failsafe y genera automáticamente el reporte HTML consolidado al finalizar `verify` en:
+  - **`cocos-trading-service/target/site/jacoco/index.html`**
+  - Para abrirlo en macOS: `open cocos-trading-service/target/site/jacoco/index.html`
 
 ---
 
@@ -381,7 +393,7 @@ Ejemplo de respuesta (`201 Created`):
   "type": "MARKET",
   "side": "BUY",
   "status": "FILLED",
-  "datetime": "2024-06-15T14:30:00"
+  "datetime": "2024-06-15T14:30:00Z"
 }
 ```
 
@@ -421,7 +433,7 @@ Ejemplo de respuesta (`201 Created` — retorna `quantity` de acciones calculada
   "type": "MARKET",
   "side": "BUY",
   "status": "FILLED",
-  "datetime": "2024-06-15T14:31:00"
+  "datetime": "2024-06-15T14:31:00Z"
 }
 ```
 
@@ -471,7 +483,7 @@ Ejemplo de respuesta (`201 Created` — retorna `TransferOrderApi` con `amount` 
   },
   "side": "CASH_IN",
   "status": "FILLED",
-  "datetime": "2024-06-15T14:35:00"
+  "datetime": "2024-06-15T14:35:00Z"
 }
 ```
 

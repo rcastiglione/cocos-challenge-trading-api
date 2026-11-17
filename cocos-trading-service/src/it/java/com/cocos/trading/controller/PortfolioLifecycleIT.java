@@ -29,7 +29,7 @@ import com.cocos.trading.repository.jpa.SpringDataInstrumentRepository;
 import com.cocos.trading.repository.jpa.SpringDataMarketDataRepository;
 import com.cocos.trading.repository.jpa.SpringDataOrderRepository;
 import com.cocos.trading.repository.jpa.SpringDataUserRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

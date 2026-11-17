@@ -41,7 +41,7 @@ import java.util.UUID;
 public final class ApiMapper {
 
     private static final DateTimeFormatter ISO_DATETIME_FORMATTER = DateTimeFormatter
-            .ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+            .ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
     private ApiMapper() {
     }

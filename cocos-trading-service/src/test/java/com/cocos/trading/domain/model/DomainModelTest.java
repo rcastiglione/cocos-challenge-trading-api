@@ -119,6 +119,7 @@ class DomainModelTest {
         assertEquals(10, tradeOrderApi.quantity());
         assertEquals(new BigDecimal("925.85"), tradeOrderApi.price().amount());
         assertEquals("ARS", tradeOrderApi.price().currency());
+        assertEquals("2024-06-15T14:30:00Z", tradeOrderApi.datetime());
 
         TransferOrderJpaEntity transferOrderEntity = TransferOrderJpaEntity.builder()
                 .id(106L)
@@ -140,6 +141,7 @@ class DomainModelTest {
         assertEquals(new BigDecimal("50000.00"), transferOrderApi.amount().amount());
         assertEquals("ARS", transferOrderApi.amount().currency());
         assertEquals(com.cocos.trading.api.common.OrderStatusApi.FILLED, transferOrderApi.status());
+        assertEquals("2024-06-15T14:35:00Z", transferOrderApi.datetime());
     }
 
     @Test

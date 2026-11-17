@@ -34,7 +34,7 @@ import com.cocos.trading.repository.jpa.SpringDataInstrumentRepository;
 import com.cocos.trading.repository.jpa.SpringDataMarketDataRepository;
 import com.cocos.trading.repository.jpa.SpringDataOrderRepository;
 import com.cocos.trading.repository.jpa.SpringDataUserRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -156,7 +156,8 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$.price.amount").value(925.85))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.amount").doesNotExist())
-                .andExpect(jsonPath("$.status").value("FILLED"));
+                .andExpect(jsonPath("$.status").value("FILLED"))
+                .andExpect(jsonPath("$.datetime", org.hamcrest.Matchers.matchesPattern("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z")));
 
         List<OrderJpaEntity> persistedOrders = orderRepository.findByUserIdAndStatusOrderByDatetimeAscIdAsc(
                 savedUser.getId(),
@@ -190,7 +191,8 @@ class OrderControllerIT extends TradingApplicationIT {
                 .andExpect(jsonPath("$.price.amount").value(925.85))
                 .andExpect(jsonPath("$.price.currency").value("ARS"))
                 .andExpect(jsonPath("$.amount").doesNotExist())
-                .andExpect(jsonPath("$.status").value("FILLED"));
+                .andExpect(jsonPath("$.status").value("FILLED"))
+                .andExpect(jsonPath("$.datetime", org.hamcrest.Matchers.matchesPattern("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z")));
     }
 
     @Test

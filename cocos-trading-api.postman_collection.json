@@ -259,7 +259,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 12,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00\"\n}"
+              "body": "{\n  \"id\": 12,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00Z\"\n}"
             }
           ]
         },
@@ -331,7 +331,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 13,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 16,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:00\"\n}"
+              "body": "{\n  \"id\": 13,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 16,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:00Z\"\n}"
             }
           ]
         },
@@ -403,7 +403,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 14,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"SELL\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:30\"\n}"
+              "body": "{\n  \"id\": 14,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"SELL\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:31:30Z\"\n}"
             }
           ]
         },
@@ -475,7 +475,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 105,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"NEW\",\n  \"datetime\": \"2024-06-15T14:32:00\"\n}"
+              "body": "{\n  \"id\": 105,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 5,\n  \"price\": {\n    \"amount\": 900.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"NEW\",\n  \"datetime\": \"2024-06-15T14:32:00Z\"\n}"
             }
           ]
         },
@@ -524,7 +524,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 5,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 45,\n    \"ticker\": \"LOMA\"\n  },\n  \"quantity\": 50,\n  \"price\": {\n    \"amount\": 710.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2023-07-12T15:14:20\"\n}"
+              "body": "{\n  \"id\": 5,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 45,\n    \"ticker\": \"LOMA\"\n  },\n  \"quantity\": 50,\n  \"price\": {\n    \"amount\": 710.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2023-07-12T15:14:20Z\"\n}"
             },
             {
               "name": "200 OK — Idempotent Replay (Order Already CANCELLED)",
@@ -552,7 +552,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 5,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 45,\n    \"ticker\": \"LOMA\"\n  },\n  \"quantity\": 50,\n  \"price\": {\n    \"amount\": 710.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2023-07-12T15:14:20\"\n}"
+              "body": "{\n  \"id\": 5,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 45,\n    \"ticker\": \"LOMA\"\n  },\n  \"quantity\": 50,\n  \"price\": {\n    \"amount\": 710.00,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"LIMIT\",\n  \"side\": \"BUY\",\n  \"status\": \"CANCELLED\",\n  \"datetime\": \"2023-07-12T15:14:20Z\"\n}"
             }
           ]
         }
@@ -630,7 +630,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 15,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_IN\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:35:00\"\n}"
+              "body": "{\n  \"id\": 15,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 50000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_IN\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:35:00Z\"\n}"
             }
           ]
         },
@@ -702,7 +702,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 16,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_OUT\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:36:00\"\n}"
+              "body": "{\n  \"id\": 16,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"amount\": {\n    \"amount\": 20000.00,\n    \"currency\": \"ARS\"\n  },\n  \"side\": \"CASH_OUT\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:36:00Z\"\n}"
             }
           ]
         }
@@ -1140,7 +1140,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 18,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"SELL\",\n  \"status\": \"REJECTED\",\n  \"datetime\": \"2024-06-15T14:40:00\"\n}"
+              "body": "{\n  \"id\": 18,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"SELL\",\n  \"status\": \"REJECTED\",\n  \"datetime\": \"2024-06-15T14:40:00Z\"\n}"
             }
           ]
         },
@@ -1212,7 +1212,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 19,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"REJECTED\",\n  \"datetime\": \"2024-06-15T14:41:00\"\n}"
+              "body": "{\n  \"id\": 19,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 50000,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"REJECTED\",\n  \"datetime\": \"2024-06-15T14:41:00Z\"\n}"
             }
           ]
         },
@@ -1284,7 +1284,7 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": 20,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00\"\n}"
+              "body": "{\n  \"id\": 20,\n  \"user\": {\n    \"id\": 1,\n    \"accountNumber\": \"10001\"\n  },\n  \"instrument\": {\n    \"id\": 47,\n    \"ticker\": \"PAMP\"\n  },\n  \"quantity\": 10,\n  \"price\": {\n    \"amount\": 925.85,\n    \"currency\": \"ARS\"\n  },\n  \"type\": \"MARKET\",\n  \"side\": \"BUY\",\n  \"status\": \"FILLED\",\n  \"datetime\": \"2024-06-15T14:30:00Z\"\n}"
             },
             {
               "name": "409 Conflict — In-Flight Concurrency Collision (Redis Lock Held)",

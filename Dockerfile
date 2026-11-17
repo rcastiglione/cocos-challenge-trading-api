@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Build the multi-module Maven application
 # =============================================================================
-FROM maven:3.9.9-amazoncorretto-21-alpine AS builder
+FROM maven:3.9-amazoncorretto-25-alpine AS builder
 WORKDIR /workspace
 
 # Copy POM files and sources to build the executable Spring Boot fat JAR
@@ -12,9 +12,9 @@ COPY cocos-trading-service ./cocos-trading-service
 RUN mvn clean package -DskipTests -B
 
 # =============================================================================
-# Stage 2: Lightweight Alpine JDK 21 runtime image
+# Stage 2: Lightweight Alpine JDK 25 runtime image
 # =============================================================================
-FROM amazoncorretto:21-alpine-jdk
+FROM amazoncorretto:25-alpine-jdk
 WORKDIR /app
 
 RUN addgroup -S cocos && adduser -S cocos -G cocos \

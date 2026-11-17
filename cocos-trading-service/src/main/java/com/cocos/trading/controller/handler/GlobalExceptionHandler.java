@@ -9,13 +9,12 @@ import com.cocos.trading.domain.exception.DuplicateOrderException;
 import com.cocos.trading.domain.exception.IdempotencyMismatchException;
 import com.cocos.trading.domain.exception.InvalidOrderStateException;
 import com.cocos.trading.domain.exception.ResourceNotFoundException;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
-import com.fasterxml.jackson.databind.exc.MismatchedInputException;
-import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -23,25 +22,21 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
-import org.zalando.problem.spring.web.advice.ProblemHandling;
+import tools.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.databind.exc.MismatchedInputException;
+import tools.jackson.databind.exc.UnrecognizedPropertyException;
 
 /**
  * Global exception handler translating validation, JSON parsing, and domain exceptions
- * into standardized RFC 7807 {@link Problem} HTTP responses.
+ * into standardized RFC 7807 {@link ProblemDetail} HTTP responses.
  */
 @Slf4j
 @RestControllerAdvice
-public class GlobalExceptionHandler implements ProblemHandling {
+public class GlobalExceptionHandler {
 
-    @Override
-    public ResponseEntity<Problem> handleMessageNotReadableException(
-            HttpMessageNotReadableException exception,
-            NativeWebRequest request
-    ) {
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ProblemDetail> handleMessageNotReadableException(HttpMessageNotReadableException exception) {
         Throwable cause = exception.getCause();
 
         if (cause instanceof UnrecognizedPropertyException unrecognized) {
@@ -57,36 +52,32 @@ public class GlobalExceptionHandler implements ProblemHandling {
                 message = String.format("Unrecognized field '%s' is not allowed for this request type.", fieldName);
             }
             log.warn("Unrecognized property in JSON request: {}", message);
-            return ResponseEntity.badRequest()
-                    .body(new BadRequestProblem(message, Map.of("field", fieldName)));
+            return problemResponse(HttpStatus.BAD_REQUEST, new BadRequestProblem(message, Map.of("field", fieldName)));
         }
 
         if (cause instanceof InvalidFormatException invalidFormat && !invalidFormat.getPath().isEmpty()) {
-            String fieldName = invalidFormat.getPath().getFirst().getFieldName();
+            String fieldName = invalidFormat.getPath().getFirst().getPropertyName();
             String message = String.format("Invalid value '%s' for field '%s'.", invalidFormat.getValue(), fieldName);
             log.warn("Invalid format in JSON request: {}", message);
-            return ResponseEntity.badRequest()
-                    .body(new BadRequestProblem(message, Map.of("field", fieldName)));
+            return problemResponse(HttpStatus.BAD_REQUEST, new BadRequestProblem(message, Map.of("field", fieldName)));
         }
 
         if (cause instanceof MismatchedInputException mismatched && !mismatched.getPath().isEmpty()) {
-            String fieldName = mismatched.getPath().getFirst().getFieldName();
+            String fieldName = mismatched.getPath().getFirst().getPropertyName();
             String message = String.format("Field '%s' is invalid or cannot be null.", fieldName);
             log.warn("Mismatched input in JSON request: {}", message);
-            return ResponseEntity.badRequest()
-                    .body(new BadRequestProblem(message, Map.of("field", fieldName)));
+            return problemResponse(HttpStatus.BAD_REQUEST, new BadRequestProblem(message, Map.of("field", fieldName)));
         }
 
         log.warn("Malformed JSON request", exception);
-        return ResponseEntity.badRequest()
-                .body(new BadRequestProblem("Malformed JSON request. Please check the request body format."));
+        return problemResponse(
+                HttpStatus.BAD_REQUEST,
+                new BadRequestProblem("Malformed JSON request. Please check the request body format.")
+        );
     }
 
-    @Override
-    public ResponseEntity<Problem> handleMethodArgumentNotValid(
-            MethodArgumentNotValidException exception,
-            NativeWebRequest request
-    ) {
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ProblemDetail> handleMethodArgumentNotValid(MethodArgumentNotValidException exception) {
         Map<String, String> errors = new LinkedHashMap<>();
         for (FieldError fieldError : exception.getBindingResult().getFieldErrors()) {
             errors.putIfAbsent(
@@ -97,81 +88,88 @@ public class GlobalExceptionHandler implements ProblemHandling {
 
         String summaryMessage = "Validation failed: " + String.join("; ", errors.values());
         log.warn("Request validation failed: {}", summaryMessage);
-        return ResponseEntity.badRequest()
-                .body(new BadRequestProblem(summaryMessage, errors));
+        return problemResponse(HttpStatus.BAD_REQUEST, new BadRequestProblem(summaryMessage, errors));
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
-    public ResponseEntity<Problem> handleMissingRequestHeaderException(MissingRequestHeaderException ex) {
+    public ResponseEntity<ProblemDetail> handleMissingRequestHeaderException(MissingRequestHeaderException ex) {
         String message = String.format("Required request header '%s' is missing.", ex.getHeaderName());
         log.warn("Missing request header: {}", message);
-        return ResponseEntity.badRequest()
-                .body(new BadRequestProblem(message, Map.of("header", ex.getHeaderName())));
+        return problemResponse(HttpStatus.BAD_REQUEST, new BadRequestProblem(message, Map.of("header", ex.getHeaderName())));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<Problem> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException ex) {
+    public ResponseEntity<ProblemDetail> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException ex) {
         String parameterName = ex.getName();
         String message = String.format("Invalid value '%s' for parameter '%s'.", ex.getValue(), parameterName);
         log.warn("Parameter type mismatch: {}", message);
-        return ResponseEntity.badRequest()
-                .body(new BadRequestProblem(message, Map.of("parameter", parameterName)));
+        return problemResponse(HttpStatus.BAD_REQUEST, new BadRequestProblem(message, Map.of("parameter", parameterName)));
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<Problem> handleResourceNotFoundException(ResourceNotFoundException ex) {
+    public ResponseEntity<ProblemDetail> handleResourceNotFoundException(ResourceNotFoundException ex) {
         log.warn("Resource not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ResourceNotFoundProblem(ex.getResourceName(), ex.getIdentifier(), ex.getMessage()));
+        return problemResponse(
+                HttpStatus.NOT_FOUND,
+                new ResourceNotFoundProblem(ex.getResourceName(), ex.getIdentifier(), ex.getMessage())
+        );
     }
 
     @ExceptionHandler(DuplicateOrderException.class)
-    public ResponseEntity<Problem> handleDuplicateOrderException(DuplicateOrderException ex) {
+    public ResponseEntity<ProblemDetail> handleDuplicateOrderException(DuplicateOrderException ex) {
         log.warn("Duplicate order request (idempotency conflict): {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new BusinessRuleViolationProblem(
+        return problemResponse(
+                HttpStatus.CONFLICT,
+                new BusinessRuleViolationProblem(
                         "Duplicate Order",
-                        Status.CONFLICT,
+                        HttpStatus.CONFLICT,
                         ex.getMessage(),
                         Map.of("idempotencyKey", ex.getIdempotencyKey().toString())
-                ));
+                )
+        );
     }
 
     @ExceptionHandler(IdempotencyMismatchException.class)
-    public ResponseEntity<Problem> handleIdempotencyMismatchException(IdempotencyMismatchException ex) {
+    public ResponseEntity<ProblemDetail> handleIdempotencyMismatchException(IdempotencyMismatchException ex) {
         log.warn("Idempotency key payload mismatch for key={}: {}", ex.getIdempotencyKey(), ex.getMessage());
-        return ResponseEntity.badRequest()
-                .body(new BadRequestProblem(
+        return problemResponse(
+                HttpStatus.BAD_REQUEST,
+                new BadRequestProblem(
                         ex.getMessage(),
                         Map.of("idempotencyKey", ex.getIdempotencyKey().toString())
-                ));
+                )
+        );
     }
 
     @ExceptionHandler(InvalidOrderStateException.class)
-    public ResponseEntity<Problem> handleInvalidOrderStateException(InvalidOrderStateException ex) {
+    public ResponseEntity<ProblemDetail> handleInvalidOrderStateException(InvalidOrderStateException ex) {
         log.warn("Invalid order state transition: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new BusinessRuleViolationProblem(
+        return problemResponse(
+                HttpStatus.CONFLICT,
+                new BusinessRuleViolationProblem(
                         "Invalid Order State",
-                        Status.CONFLICT,
+                        HttpStatus.CONFLICT,
                         ex.getMessage(),
                         Map.of(
                                 "orderId", ex.getOrderId(),
                                 "currentStatus", ex.getCurrentStatus().name()
                         )
-                ));
+                )
+        );
     }
 
     @ExceptionHandler(BusinessRuleViolationException.class)
-    public ResponseEntity<Problem> handleBusinessRuleViolationException(BusinessRuleViolationException ex) {
+    public ResponseEntity<ProblemDetail> handleBusinessRuleViolationException(BusinessRuleViolationException ex) {
         log.warn("Business rule violation: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new BusinessRuleViolationProblem(
+        return problemResponse(
+                HttpStatus.CONFLICT,
+                new BusinessRuleViolationProblem(
                         "Business Rule Violation",
-                        Status.CONFLICT,
+                        HttpStatus.CONFLICT,
                         ex.getMessage(),
                         null
-                ));
+                )
+        );
     }
 
     @ExceptionHandler(Exception.class)
@@ -180,5 +178,10 @@ public class GlobalExceptionHandler implements ProblemHandling {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "An internal server error occurred. Please try again later."));
     }
-}
 
+    private static ResponseEntity<ProblemDetail> problemResponse(HttpStatus status, ProblemDetail problemDetail) {
+        return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problemDetail);
+    }
+}
