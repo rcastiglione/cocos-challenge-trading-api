@@ -108,7 +108,9 @@ public class OrderService implements PlaceOrderUseCase, CancelOrderUseCase {
         Timer.Sample executionSample = tradingMetricsService.startOrderTimer();
         log.info("[order] Placing order from command={}", command);
 
-        UserJpaEntity user = userRepositoryPort.findById(command.userId())
+        // Acquire row-level pessimistic write lock (SELECT ... FOR UPDATE) before reading balances
+        // to prevent TOCTOU double-spending across concurrent orders with distinct idempotency keys.
+        UserJpaEntity user = userRepositoryPort.findAndLockById(command.userId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", command.userId()));
 
         InstrumentJpaEntity instrument = resolveInstrument(command);

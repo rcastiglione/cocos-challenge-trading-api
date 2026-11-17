@@ -190,6 +190,11 @@ cocos-challenge-trading-api/
      - Si la orden está en `NEW` $\rightarrow$ transiciona a `CANCELLED`, persiste en PostgreSQL, incrementa la métrica en Micrometer y retorna `200 OK`.
      - Si la orden **ya está en `CANCELLED`** $\rightarrow$ retorna inmediatamente `200 OK` con la orden cancelada (*Idempotent Replay*), sin re-guardar en base de datos ni duplicar métricas.
      - Si la orden está en un estado terminal incompatible (`FILLED` o `REJECTED`) $\rightarrow$ lanza `InvalidOrderStateException` (`409 Conflict`).
+  4. **Double-Spend Prevention (`PESSIMISTIC_WRITE` / `SELECT ... FOR UPDATE`)**:
+     - **Redis vs. Pessimistic Locking (Responsabilidades Complementarias)**:
+       - **Redis (`Idempotency-Key` Lock)**: Protege contra **reintentos de red idénticos y *double-clicks*** que reutilizan el mismo `Idempotency-Key` UUID.
+       - **PostgreSQL User-Level Pessimistic Locking (`SELECT ... FOR UPDATE`)**: Protege contra **mutaciones concurrentes de estado (TOCTOU)** cuando un mismo usuario envía múltiples órdenes distintas en el mismo milisegundo con **diferentes `Idempotency-Key`s**.
+     - Al inicio de `OrderService.executePlaceOrder` (dentro de `@Transactional` y antes de consultar o calcular saldos), se invoca `userRepositoryPort.findAndLockById(userId)` (`@Lock(LockModeType.PESSIMISTIC_WRITE)` con `jakarta.persistence.lock.timeout = 3000`). Esto serializa las transacciones **por `userId`** con cero contención global, garantizando que el segundo hilo lea el saldo ya confirmado por el primero y evitando que el balance caiga por debajo de cero.
 
 ---
 

@@ -20,4 +20,9 @@ public class UserRepositoryAdapter implements UserRepositoryPort {
     public Optional<UserJpaEntity> findById(Long id) {
         return springDataUserRepository.findById(id);
     }
+
+    @Override
+    public Optional<UserJpaEntity> findAndLockById(Long id) {
+        return springDataUserRepository.findAndLockById(id);
+    }
 }

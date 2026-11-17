@@ -106,7 +106,7 @@ class OrderServiceTest {
     void shouldExecuteMarketBuyByQuantityAsFilled() {
         PlaceOrderCommand command = TradingFixtures.marketBuyByQuantity(10);
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findById(TradingFixtures.PAMP_INSTRUMENT_ID))
                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
@@ -150,7 +150,7 @@ class OrderServiceTest {
         // 10,000 ARS / 925.85 = 10 shares
         PlaceOrderCommand command = TradingFixtures.marketBuyByAmount("10000.00");
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findById(TradingFixtures.PAMP_INSTRUMENT_ID))
                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
@@ -175,7 +175,7 @@ class OrderServiceTest {
         // 100 shares * 925.85 = 92,585.00 ARS > 10,000.00 ARS available
         PlaceOrderCommand command = TradingFixtures.marketBuyByQuantity(100);
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findById(TradingFixtures.PAMP_INSTRUMENT_ID))
                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
@@ -211,7 +211,7 @@ class OrderServiceTest {
                 .quantity(50L)
                 .build();
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findById(TradingFixtures.PAMP_INSTRUMENT_ID))
                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
@@ -246,7 +246,7 @@ class OrderServiceTest {
                 .price(MonetaryAmount.ars("900.00"))
                 .build();
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findById(TradingFixtures.PAMP_INSTRUMENT_ID))
                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
@@ -323,7 +323,7 @@ class OrderServiceTest {
         int concurrentRequests = 50;
         PlaceOrderCommand command = TradingFixtures.marketBuyByQuantity(10);
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findById(TradingFixtures.PAMP_INSTRUMENT_ID))
                 .thenReturn(Optional.of(TradingFixtures.pampInstrument()));
@@ -383,7 +383,7 @@ class OrderServiceTest {
                 .amount(MonetaryAmount.ars("20000.00"))
                 .build();
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findByTicker("ARS"))
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
@@ -419,7 +419,7 @@ class OrderServiceTest {
                 .amount(MonetaryAmount.ars("60000.00"))
                 .build();
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findByTicker("ARS"))
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));
@@ -575,7 +575,7 @@ class OrderServiceTest {
         when(idempotencyRepositoryPort.tryAcquire(eq(sharedIdempotencyKey), eq(OrderService.IDEMPOTENCY_TTL)))
                 .thenAnswer(inv -> lockedKeys.add(inv.getArgument(0)));
 
-        when(userRepositoryPort.findById(TradingFixtures.DEFAULT_USER_ID))
+        when(userRepositoryPort.findAndLockById(TradingFixtures.DEFAULT_USER_ID))
                 .thenReturn(Optional.of(TradingFixtures.defaultUser()));
         when(instrumentRepositoryPort.findByTicker("ARS"))
                 .thenReturn(Optional.of(TradingFixtures.arsInstrument()));

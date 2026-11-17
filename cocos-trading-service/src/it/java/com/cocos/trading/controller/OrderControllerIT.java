@@ -620,4 +620,66 @@ class OrderControllerIT extends TradingApplicationIT {
         // 1 initial seed order + 1 executed BUY order = 2 total orders in DB
         assertEquals(2, orderRepository.findAll().size());
     }
+
+    @Test
+    @DisplayName("Should prevent TOCTOU double-spending via PESSIMISTIC_WRITE when concurrent orders use distinct Idempotency-Keys")
+    void shouldPreventConcurrentDoubleSpendingWithDistinctIdempotencyKeys() throws Exception {
+        // Seed user has 50,000.00 ARS; PAMP close = 925.85 ARS.
+        // 50 shares cost 46,292.50 ARS (> 50% of balance, so two concurrent orders cannot both be FILLED).
+        OrderCreateRequestApi buyRequest = new TradeOrderRequestApi(
+                savedUser.getId(),
+                pampInstrument.getId(),
+                OrderSideApi.BUY,
+                OrderTypeApi.MARKET,
+                50L,
+                null,
+                null
+        );
+        String payload = objectMapper.writeValueAsString(buyRequest);
+
+        int concurrentRequests = 2;
+        CountDownLatch readyLatch = new CountDownLatch(concurrentRequests);
+        CountDownLatch startGate = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(concurrentRequests);
+
+        List<String> orderStatuses = new ArrayList<>();
+        try {
+            List<Future<String>> futures = new ArrayList<>(concurrentRequests);
+            for (int i = 0; i < concurrentRequests; i++) {
+                UUID distinctKey = UUID.randomUUID();
+                futures.add(executor.submit(() -> {
+                    readyLatch.countDown();
+                    startGate.await(5, TimeUnit.SECONDS);
+                    var mvcResult = mockMvc.perform(post("/orders")
+                                    .header(OrderContractApi.IDEMPOTENCY_KEY_HEADER, distinctKey.toString())
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(payload))
+                            .andExpect(status().isCreated())
+                            .andReturn();
+                    var jsonNode = objectMapper.readTree(mvcResult.getResponse().getContentAsString());
+                    return jsonNode.get("status").asText();
+                }));
+            }
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startGate.countDown();
+
+            for (Future<String> future : futures) {
+                orderStatuses.add(future.get(10, TimeUnit.SECONDS));
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        long filledCount = orderStatuses.stream().filter("FILLED"::equals).count();
+        long rejectedCount = orderStatuses.stream().filter("REJECTED"::equals).count();
+
+        assertEquals(1, filledCount, "Exactly one concurrent order must be FILLED");
+        assertEquals(1, rejectedCount, "The serialized second order must be REJECTED due to insufficient funds");
+
+        // Verify portfolio available cash never dropped below zero (50,000.00 - 46,292.50 = 3,707.50 ARS)
+        mockMvc.perform(get("/portfolios/{userId}", savedUser.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.availableCash.amount").value(3707.50));
+    }
 }
