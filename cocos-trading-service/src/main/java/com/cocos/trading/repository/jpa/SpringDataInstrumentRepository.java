@@ -14,10 +14,10 @@ public interface SpringDataInstrumentRepository
         extends JpaRepository<InstrumentJpaEntity, Long>, JpaSpecificationExecutor<InstrumentJpaEntity> {
 
     /**
-     * Finds an instrument by its ticker symbol (case-insensitive).
+     * Finds an instrument by its canonical uppercase ticker symbol.
      *
-     * @param ticker The instrument ticker (e.g., {@code "ARS"} or {@code "PAMP"}).
+     * @param ticker The uppercase instrument ticker (e.g., {@code "ARS"} or {@code "PAMP"}).
      * @return An {@link Optional} containing the matching {@link InstrumentJpaEntity} if found.
      */
-    Optional<InstrumentJpaEntity> findByTickerIgnoreCase(String ticker);
+    Optional<InstrumentJpaEntity> findByTicker(String ticker);
 }

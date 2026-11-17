@@ -17,11 +17,11 @@ public final class InstrumentSpecifications {
 
     /**
      * Builds a dynamic JPA {@link Specification} from the given {@link InstrumentSearchQuery}.
-     *<ul>
+     * <ul>
      *   <li>If {@code query} is provided, matches instruments where {@code ticker} OR {@code name} contains the term (case-insensitive).</li>
-     *   <li>If {@code ticker} is provided, matches instruments where {@code ticker} contains the value (case-insensitive).</li>
-     *   <li>If {@code name} is provided, matches instruments where {@code name} contains the value (case-insensitive).</li>
-     *</ul>
+     *   <li>If {@code ticker} is provided, matches instruments where {@code ticker} equals the uppercase-normalized value (exact match).</li>
+     *   <li>If {@code name} is provided, matches instruments where {@code name} equals the value (exact match, case-insensitive).</li>
+     * </ul>
      *
      * @param searchQuery The filter criteria.
      * @return The composed {@link Specification}.
@@ -42,13 +42,13 @@ public final class InstrumentSpecifications {
             }
 
             if (searchQuery.ticker() != null && !searchQuery.ticker().isBlank()) {
-                String pattern = "%" + searchQuery.ticker().trim().toLowerCase() + "%";
-                predicates.add(cb.like(cb.lower(root.get("ticker")), pattern));
+                String normalizedTicker = searchQuery.ticker().trim().toUpperCase();
+                predicates.add(cb.equal(root.get("ticker"), normalizedTicker));
             }
 
             if (searchQuery.name() != null && !searchQuery.name().isBlank()) {
-                String pattern = "%" + searchQuery.name().trim().toLowerCase() + "%";
-                predicates.add(cb.like(cb.lower(root.get("name")), pattern));
+                String normalizedName = searchQuery.name().trim().toLowerCase();
+                predicates.add(cb.equal(cb.lower(root.get("name")), normalizedName));
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));

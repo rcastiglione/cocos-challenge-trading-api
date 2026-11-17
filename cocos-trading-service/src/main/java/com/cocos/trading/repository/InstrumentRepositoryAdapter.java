@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,8 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
+
+    public static final int MAX_SEARCH_RESULTS = 50;
 
     private final SpringDataInstrumentRepository springDataInstrumentRepository;
 
@@ -33,7 +36,7 @@ public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
         if (ticker == null || ticker.isBlank()) {
             return Optional.empty();
         }
-        return springDataInstrumentRepository.findByTickerIgnoreCase(ticker.trim());
+        return springDataInstrumentRepository.findByTicker(ticker.trim().toUpperCase());
     }
 
     @Override
@@ -48,6 +51,8 @@ public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
     public List<InstrumentJpaEntity> search(InstrumentSearchQuery query) {
         Specification<InstrumentJpaEntity> spec = InstrumentSpecifications.withFilters(query);
         Sort sort = Sort.by(Sort.Direction.ASC, "ticker");
-        return springDataInstrumentRepository.findAll(spec, sort);
+        return springDataInstrumentRepository
+                .findAll(spec, PageRequest.of(0, MAX_SEARCH_RESULTS, sort))
+                .getContent();
     }
 }

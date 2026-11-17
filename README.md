@@ -9,7 +9,7 @@ Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, 
 - **Java 25 (LTS)** (*Records*, *Pattern Matching*, *Switch Expressions*, *Virtual Threads*): Adoptado para aprovechar las últimas optimizaciones de la JVM LTS, estabilidad avanzada de **Virtual Threads** (sin *pinning* en bloques `synchronized`) y mejoras de *throughput* y GC.
 - **Spring Boot 4.0.9** (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-data-redis`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`, `spring-boot-starter-flyway`): Mantiene el *framework* en el *bleeding edge* sobre Spring Framework 7, Jackson 3 y Jakarta EE 11 con soporte de primera clase para Java 25.
 - **Redis 7 (`redis:7-alpine`)**: *In-Memory Fast-Fail Distributed Lock* para ráfagas concurrentes en vuelo (`IN_FLIGHT_LOCK_TTL = 30s` vía comandos atómicos `SET ... NX EX 30`), previniendo condiciones de carrera y *double-spending* simultáneo
-- **PostgreSQL 16 & Flyway (`spring-boot-starter-flyway` + `flyway-database-postgresql`)**: Versionado y migración continua del esquema relacional (`V1__init_schema.sql`, `V2__add_idempotency_key_to_orders.sql`, `V3__add_performance_indexes.sql`), asegurando **True Idempotency** con *Safe Replay* duradero, validación **Stripe-style Idempotency Mismatch** (`request_hash` SHA-256) e índices *non-clustered* para *hot paths* de lectura.
+- **PostgreSQL 16 & Flyway (`spring-boot-starter-flyway` + `flyway-database-postgresql`)**: Versionado declarativo del esquema relacional, asegurando **True Idempotency** con *Safe Replay* duradero, validación **Stripe-style Idempotency Mismatch** (`request_hash` SHA-256), almacenamiento `BIGINT` para nominales e índices B-Tree *non-clustered* para *hot paths* de lectura.
 - **Observability & Telemetry Stack** (*Nice-to-Have SRE Layer*): **Micrometer (`micrometer-registry-prometheus`)**, **Distributed Tracing (`micrometer-tracing-bridge-brave` con W3C `traceId`/`spanId` en logs)**, **Prometheus** y **Grafana** (con *Zero-Touch Auto-Provisioning* de *datasource* y *dashboard* en tiempo real)
 - **Lombok** (`@SuperBuilder`, `@Builder`, `@Getter`, `@RequiredArgsConstructor`, `@Slf4j`) para reducir *boilerplate* en modelos de dominio, *DTOs*, *JPA Entities* y servicios
 - **PostgreSQL 16** (NeonDB cloud PostgreSQL para el perfil `prod`, **Docker Compose** para desarrollo `local`, y **Testcontainers (`PostgreSQLContainer` + `RedisContainer`)** para *functional integration testing* con paridad 100% de infraestructura)
@@ -78,7 +78,7 @@ cocos-challenge-trading-api/
   El esquema SQL provisto en el challenge define una única tabla `orders` que almacena tanto operaciones de mercado sobre activos financieros (`BUY` / `SELL` sobre instrumentos tipo `ACCIONES`) como movimientos de efectivo (`CASH_IN` / `CASH_OUT` sobre instrumentos tipo `MONEDA`). Cuando se adopta un **Anemic Domain Model** donde toda la lógica de negocio vive en los Servicios y Estrategias, mantener dos jerarquías paralelas (clases de dominio anémicas vs. entidades JPA anémicas) junto con un `PersistenceMapper` intermedio genera *boilerplate* y complejidad accidental.
 - **Solución Arquitectónica**:
   - **Herencia Polimórfica en JPA (`SINGLE_TABLE` + `@DiscriminatorFormula`) sobre un Modelo Anémico Unificado**:
-    - Eliminamos las clases espejo redundantes y `PersistenceMapper`, modelando la jerarquía polimórfica directamente en JPA mediante `public abstract class OrderJpaEntity` (`@Inheritance(strategy = InheritanceType.SINGLE_TABLE)`) y sus dos subclases concretas:
+    - La jerarquía polimórfica se modela directamente en JPA mediante `public abstract class OrderJpaEntity` (`@Inheritance(strategy = InheritanceType.SINGLE_TABLE)`) y sus dos subclases concretas:
       - `TradeOrderJpaEntity` (`@DiscriminatorValue("TRADE")`): Operaciones de mercado (`BUY`, `SELL`) sobre `ACCIONES`.
       - `TransferOrderJpaEntity` (`@DiscriminatorValue("TRANSFER")`): Movimientos de efectivo (`CASH_IN`, `CASH_OUT`) sobre `MONEDA`.
     - **Discriminación sin Mutar el Esquema SQL (`@DiscriminatorFormula`)**: Dado que no podemos alterar la tabla `orders` en NeonDB para agregar una columna `dtype`, utilizamos `@DiscriminatorFormula("CASE WHEN side IN ('CASH_IN', 'CASH_OUT') THEN 'TRANSFER' ELSE 'TRADE' END")` de Hibernate. Esto evalúa el discriminador dinámicamente sobre la columna `side` existente al hacer `SELECT` sin interferir con los `INSERT`/`UPDATE`.
@@ -169,18 +169,18 @@ cocos-challenge-trading-api/
 
 ---
 
-### 3.9. Estandarización UTC / ISO 8601 (`Z`) & Database Performance Indexes (Flyway V3)
+### 3.9. Estandarización UTC / ISO 8601 (`Z`) & Database Performance Indexes
 - **Timestamps en UTC (`Z` — Zulu Time)**: `ApiMapper.ISO_DATETIME_FORMATTER` serializa `OrderApi.datetime` bajo el formato estricto `yyyy-MM-dd'T'HH:mm:ss'Z'` (ej. `"2026-11-17T18:57:12Z"`), eliminando ambigüedades de zona horaria entre clientes móviles/web y el motor transaccional.
-- **Índices Non-Clustered (`V3__add_performance_indexes.sql`)**:
+- **Índices B-Tree Non-Clustered**:
   - `idx_orders_userid_status_datetime_id` sobre `orders (userid, status, datetime ASC, id ASC)` para resolver filtros y ordenamientos de `PortfolioService` y `AccountLedgerCalculator` mediante *Index Scan* ordenado.
   - `idx_orders_idempotency_key` (*partial unique index* `WHERE idempotency_key IS NOT NULL`) para *lookups* de *Safe Replay*.
   - `idx_marketdata_instrumentid_date_id` sobre `marketdata (instrumentid, date DESC, id DESC)` para consultas de última cotización (*single* y *batch `IN`*).
-  - `idx_instruments_ticker_lower` (*functional index* `LOWER(ticker)`) e `idx_instruments_ticker` para búsquedas *case-insensitive* (`findByTickerIgnoreCase`).
+  - `idx_instruments_ticker` sobre `instruments (ticker)` para búsquedas exactas de alta velocidad, respaldado por el almacenamiento canónico en mayúsculas de los tickers.
 
 ---
 
 ### 3.10. SRE & High-Nominality Risks (Protección contra Integer Overflow & Hiperinflación)
-- **Nominales en 64-bit (`Long` / `BIGINT`)**: En Java, `Integer.MAX_VALUE` (`~2.14 * 10^9`) representa un riesgo sistémico en mercados de alta nominalidad como el argentino. Inversores institucionales o *whales* operando *penny stocks* (ej. **COME** — *Sociedad Comercial del Plata*) o bonos soberanos altamente líquidos (ej. **AL30** / **AL29**) pueden superar fácilmente los `2.14` mil millones de nominales en órdenes individuales o posiciones acumuladas. Para prevenir *Integer Overflow* silencioso y errores `integer out of range` en PostgreSQL, `quantity` se tipa como **`Long`** de punta a punta (contrato DTOs, `OrderJpaEntity`, `AccountLedgerCalculator`, `PortfolioService` y estrategias) respaldado por la migración **`V4__widen_orders_size_to_bigint.sql`** (`orders.size` -> `BIGINT`).
+- **Nominales en 64-bit (`Long` / `BIGINT`)**: En mercados de alta nominalidad como el argentino, `Integer.MAX_VALUE` (`~2.14 * 10^9`) resulta insuficiente para inversores institucionales o *whales* operando *penny stocks* (ej. **COME** — *Sociedad Comercial del Plata*) o bonos soberanos altamente líquidos (ej. **AL30** / **AL29**). Para prevenir *Integer Overflow* y errores `integer out of range` en PostgreSQL, `quantity` se tipa como **`Long`** de punta a punta (contrato DTOs, `OrderJpaEntity`, `AccountLedgerCalculator`, `PortfolioService` y estrategias), respaldado por `orders.size` como **`BIGINT`** en PostgreSQL.
 - **Advertencia para Esquemas Futuros (`NUMERIC(38, 4)` vs `NUMERIC(19, 2)`)**: Para futuros diseños de base de datos o nuevas tablas contables, se recomienda utilizar **`NUMERIC(38, 4)`** en lugar de `NUMERIC(19, 2)` (y muy por encima del `NUMERIC(10, 2)` heredado del esquema V1) para *future-proof* el *ledger* frente a agregaciones de volumen en escenarios hiperinflacionarios y conservar precisión sub-centavo en cálculos intermedios.
 
 ---
@@ -264,7 +264,7 @@ mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=prod
 mvn clean verify
 ```
 - **Unit tests** (`*Test.java` en `src/test/java`) se ejecutan vía `maven-surefire-plugin`.
-- **Functional integration tests** (`*IT.java` en `src/it/java`) se ejecutan vía `maven-failsafe-plugin` contra contenedores reales de PostgreSQL 16 y Redis 7 gestionados por **Testcontainers** (incluyendo la ejecución automática de todas las migraciones Flyway `V1`–`V3`).
+- **Functional integration tests** (`*IT.java` en `src/it/java`) se ejecutan vía `maven-failsafe-plugin` contra contenedores reales de PostgreSQL 16 y Redis 7 gestionados por **Testcontainers** (incluyendo la ejecución automática de todas las migraciones Flyway).
 - **Reporte de Cobertura JaCoCo (Unit + Integration Tests)**: `jacoco-maven-plugin` instrumenta tanto Surefire como Failsafe y genera automáticamente el reporte HTML consolidado al finalizar `verify` en:
   - **`cocos-trading-service/target/site/jacoco/index.html`**
   - Para abrirlo en macOS: `open cocos-trading-service/target/site/jacoco/index.html`
@@ -351,13 +351,16 @@ Ejemplo de respuesta (`200 OK`):
 ```
 
 ### 2. Buscar Instrumentos del Mercado (`GET /instruments`)
-Permite buscar instrumentos por `query` general (coincidencia parcial *case-insensitive* en `ticker` o `name`), o filtrando específicamente por `ticker` y/o `name`:
+Permite buscar instrumentos mediante:
+- **`?query=`**: Coincidencia parcial (*contains*, *case-insensitive*) sobre `ticker` o `name`, con un límite de seguridad máximo de **50 resultados**.
+- **`?ticker=`**: **Coincidencia exacta** (la API normaliza el valor a mayúsculas para aprovechar el índice B-Tree `idx_instruments_ticker`, ej. `?ticker=PAMP`).
+- **`?name=`**: **Coincidencia exacta (*case-insensitive*)** sobre el nombre del instrumento (ej. `?name=Molinos Río de la Plata`).
 ```bash
-# Búsqueda general por query (matchea ticker OR name)
+# Búsqueda amplia/parcial por query (matchea ticker OR name, máx. 50 resultados)
 curl --location 'http://localhost:8080/instruments?query=PAMP'
 
-# Filtros específicos por ticker y/o name
-curl --location 'http://localhost:8080/instruments?ticker=MOLI&name=Molinos'
+# Filtros exactos por ticker (uppercase) y/o name (exacto, case-insensitive)
+curl --location 'http://localhost:8080/instruments?ticker=MOLI&name=Molinos%20R%C3%ADo%20de%20la%20Plata'
 ```
 
 ### 3. Enviar una Orden al Mercado (`POST /orders`)

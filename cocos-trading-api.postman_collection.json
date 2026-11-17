@@ -83,7 +83,7 @@
                 }
               ]
             },
-            "description": "Searches instruments matching `ticker` or `name` (case-insensitive substring match), returning `lastPrice` and `previousClose` as `MonetaryAmount` (`{amount, currency: 'ARS'}`) and `dailyReturnPercentage`."
+            "description": "Broad search using wildcard matching (`%...%`) to perform a case-insensitive search across both `ticker` and `name` (capped at a maximum of 50 results), returning `lastPrice` and `previousClose` as `MonetaryAmount` (`{amount, currency: 'ARS'}`) and `dailyReturnPercentage`."
           },
           "response": [
             {
@@ -121,12 +121,12 @@
           ]
         },
         {
-          "name": "1.3 Search Instruments — By Ticker & Name",
+          "name": "1.3 Search Instruments — By Exact Ticker & Name",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos",
+              "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos Río de la Plata",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -140,20 +140,20 @@
                 },
                 {
                   "key": "name",
-                  "value": "Molinos"
+                  "value": "Molinos Río de la Plata"
                 }
               ]
             },
-            "description": "Searches instruments using specific `ticker` and `name` query parameters simultaneously."
+            "description": "Searches instruments using exact matches (no wildcards), leveraging database indexes directly: `ticker` performs an exact match (normalized to uppercase against the `idx_instruments_ticker` B-Tree index) and `name` performs an exact, case-insensitive match. Use `?query=` for broad wildcard searches (max 50 results)."
           },
           "response": [
             {
-              "name": "200 OK — Matching Instruments by Ticker & Name",
+              "name": "200 OK — Matching Instruments by Exact Ticker & Name",
               "originalRequest": {
                 "method": "GET",
                 "header": [],
                 "url": {
-                  "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos",
+                  "raw": "{{baseUrl}}/instruments?ticker=MOLI&name=Molinos Río de la Plata",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -167,7 +167,7 @@
                     },
                     {
                       "key": "name",
-                      "value": "Molinos"
+                      "value": "Molinos Río de la Plata"
                     }
                   ]
                 }

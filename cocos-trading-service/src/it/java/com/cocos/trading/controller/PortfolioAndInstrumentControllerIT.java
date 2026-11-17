@@ -139,9 +139,22 @@ class PortfolioAndInstrumentControllerIT extends TradingApplicationIT {
                                 .andExpect(jsonPath("$[0].previousClose.amount").value(906.35))
                                 .andExpect(jsonPath("$[0].previousClose.currency").value("ARS"));
 
-                mockMvc.perform(get("/instruments").param("ticker", "MOLI"))
+                mockMvc.perform(get("/instruments").param("ticker", "moli"))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.length()").value(1))
                                 .andExpect(jsonPath("$[0].name").value("Molinos Río de la Plata"));
+
+                mockMvc.perform(get("/instruments").param("ticker", "MOL"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.length()").value(0));
+
+                mockMvc.perform(get("/instruments").param("name", "molinos río de la plata"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.length()").value(1))
+                                .andExpect(jsonPath("$[0].ticker").value("MOLI"));
+
+                mockMvc.perform(get("/instruments").param("name", "Molinos"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.length()").value(0));
         }
 }
