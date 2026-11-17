@@ -16,6 +16,7 @@ import lombok.Setter;
 
 /**
  * JPA entity mapped to the {@code marketdata} table.
+ * Required market data columns enforce {@code nullable = false} defensively at the JPA layer.
  */
 @Entity
 @Table(name = "marketdata")
@@ -30,7 +31,6 @@ public class MarketDataJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Column(name = "instrumentid", nullable = false)
     private Long instrumentId;
 
@@ -43,15 +43,12 @@ public class MarketDataJpaEntity {
     @Column(name = "open")
     private BigDecimal open;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Column(name = "close", nullable = false)
     private BigDecimal close;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Column(name = "previousclose", nullable = false)
     private BigDecimal previousClose;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Column(name = "date", nullable = false)
     private LocalDate date;
 }

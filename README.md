@@ -1,6 +1,47 @@
 # Cocos Capital — Transactional Trading Engine API
 
+![Java 25](https://img.shields.io/badge/Java-25%20LTS-orange)
+![Spring Boot 4.0.9](https://img.shields.io/badge/Spring%20Boot-4.0.9-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-44%20Passing%20(26%20Unit%20%2B%2018%20IT)-brightgreen)
+![Line Coverage](https://img.shields.io/badge/Line%20Coverage-85.57%25-brightgreen)
+![Branch Coverage](https://img.shields.io/badge/Branch%20Coverage-62.15%25-yellow)
+
 Una API RESTful *production-grade* para el **Cocos Capital Backend Challenge**, construida con **Java 25 (LTS)**, **Spring Boot 4.0**, **Lombok** y una **Multi-Module Pragmatic Hexagonal Architecture** con aislamiento estricto de contrato (*Framework-Agnostic Contract*).
+
+---
+
+## Quick Start / How to Run
+
+### Stack Completo con Docker Compose (Recomendado)
+Levanta **PostgreSQL 16** (pre-cargado con el dataset del challenge), **Redis 7**, **Cocos Trading API**, **Prometheus** y **Grafana** en un único comando:
+
+```bash
+docker compose up --build
+```
+
+- **API Base URL**: `http://localhost:8080`
+- **Swagger UI**: `http://localhost:8080/swagger-ui.html`
+- **Prometheus**: `http://localhost:9090` | **Grafana**: `http://localhost:3000` (`admin` / `admin`)
+
+### How to Run Tests & Coverage
+
+> **Requisito**: Docker corriendo localmente para Testcontainers (`postgres:16-alpine` + `redis:7-alpine`).
+
+```bash
+mvn clean verify
+```
+
+### Test Coverage (JaCoCo Report)
+
+| Métrica | Cobertura | Detalle |
+| :--- | :---: | :--- |
+| **Line Coverage** | **85.57%** | `599 / 700` líneas cubiertas |
+| **Branch Coverage** | **62.15%** | `225 / 362` ramas cubiertas |
+| **Method Coverage** | **87.59%** | `120 / 137` métodos cubiertos |
+| **Instruction Coverage** | **84.30%** | `2717 / 3223` instrucciones cubiertas |
+| **Suite Total** | **44 Passing** | `26` Unit Tests (Surefire) + `18` Functional IT (Failsafe + Testcontainers) |
+
+El reporte HTML consolidado se genera en `cocos-trading-service/target/site/jacoco/index.html`.
 
 ---
 
@@ -129,7 +170,7 @@ cocos-challenge-trading-api/
 
 ### 3.6. Defensive Programming (DB Schema vs Domain)
 - **Contexto & Detección**: Al inspeccionar los metadatos del *schema* PostgreSQL provisto en **NeonDB**, detectamos que la mayoría de las columnas de negocio (`price`, `size`, `side`, `type`, `status`, `datetime` en `orders`; `ticker`, `name`, `type` en `instruments`; `email`, `accountnumber` en `users`; e `instrumentid`, `close`, `previousclose`, `date` en `marketdata`) están configuradas como `NULLABLE` (`is_nullable = YES`) a nivel DDL, a pesar de ser invariantes obligatorios en el dominio financiero.
-- **Decisión Arquitectónica**: Dado que la base de datos remota es compartida y provista por los evaluadores, decidimos **no ejecutar scripts DDL (`ALTER TABLE ... SET NOT NULL`) sobre la infraestructura remota** para evitar alterar el entorno o romper herramientas de evaluación automatizada (*grading suites*). En su lugar, aplicamos **Defensive Programming** reforzando estas restricciones exclusivamente en la capa Java/JPA (`@Column(..., nullable = false)` en `OrderJpaEntity`, `InstrumentJpaEntity`, `UserJpaEntity` y `MarketDataJpaEntity` —dejando `high`, `low` y `open` como *nullable* ya que existen instrumentos sin volumen intradía en el *dataset* real—) junto con invariantes en los constructores de dominio, dejando documentados los `// TODO` correspondientes para una futura migración controlada vía **Flyway / Liquibase**.
+- **Decisión Arquitectónica**: Dado que la base de datos remota es compartida y provista por los evaluadores, decidimos **no ejecutar scripts DDL (`ALTER TABLE ... SET NOT NULL`) sobre la infraestructura remota** para evitar alterar el entorno o romper herramientas de evaluación automatizada (*grading suites*). En su lugar, aplicamos **Defensive Programming** reforzando estas restricciones exclusivamente en la capa Java/JPA (`@Column(..., nullable = false)` en `OrderJpaEntity`, `InstrumentJpaEntity`, `UserJpaEntity` y `MarketDataJpaEntity` —dejando `high`, `low` y `open` como *nullable* ya que existen instrumentos sin volumen intradía en el *dataset* real—) junto con invariantes en los constructores de dominio.
 
 ---
 
@@ -163,7 +204,7 @@ cocos-challenge-trading-api/
     - En `cocos-trading-service`, el *Value Object* de dominio `MonetaryAmount` encapsula la normalización de escala (`2` decimales `HALF_UP`) y toda la aritmética financiera segura (*currency-safe arithmetic*: `add`, `subtract`, `multiply`, `negate`, `divideToIntegralShares`, `isLessThan`), verificando `assertSameCurrency` antes de cada operación.
   - **Agrupamiento Semántico de Entidades, Contrato Polimórfico (`TradeOrderApi` vs. `TransferOrderApi`) y Simetría Estricta (`PortfolioApi` & `OrderApi`)**:
     - Se impuso **simetría estricta en toda la superficie de la API** reutilizando los mismos *Summary DTOs* (`UserSummaryApi` para `"user": { "id", "accountNumber" }` e `InstrumentSummaryApi` para `"instrument": { "id", "ticker" }` en operaciones bursátiles). Asimismo, mediante las `sealed interface`s `OrderCreateRequestApi` y `OrderApi` discriminadas por `"side"` y *Pattern Matching* en `ApiMapper`, las órdenes de renta variable (`TradeOrderJpaEntity` $\rightarrow$ `TradeOrderApi`) exponen `instrument`, `quantity`, `price` y `type`, mientras que las transferencias monetarias (`TransferOrderJpaEntity` $\rightarrow$ `TransferOrderApi`) exponen únicamente `id`, `user`, `amount`, `side`, `status` (`FILLED`) y `datetime` (sin `instrument`, `type`, `quantity` ni `price`).
-    - En `OrderJpaEntity`, el atributo `private Integer quantity` se mapea explícitamente con `@Column(name = "size", nullable = false)` para unificar el lenguaje ubicuo en Java y en el JSON sin alterar la columna física `size` de la tabla `orders`.
+    - En `OrderJpaEntity`, el atributo `private Long quantity` se mapea explícitamente con `@Column(name = "size", nullable = false)` para unificar el lenguaje ubicuo en Java y en el JSON sin alterar la columna física `size` de la tabla `orders` (`BIGINT` vía Flyway V4).
     - Al asociar `OrderJpaEntity` directamente con `UserJpaEntity` e `InstrumentJpaEntity` (hidratadas en memoria durante `OrderService.placeOrder` o vía `@ManyToOne` + `@EntityGraph` en `SpringDataOrderRepository`), `ApiMapper.toApi(OrderJpaEntity)` construye los resúmenes anidados con **cero overhead de I/O adicional** hacia PostgreSQL, elevando la **Developer Experience (DX)** para consumidores frontend y móviles.
   - **Preservación del Esquema SQL**: Siguiendo la regla del challenge (*"Los precios de los activos tienen que estar en pesos"*), las entidades JPA persisten los importes escalares en las columnas `NUMERIC` originales mientras los servicios y `ApiMapper` operan y exponen `MonetaryAmount`, manteniendo **100% intacto el esquema de base de datos original del evaluador**.
 
@@ -253,7 +294,7 @@ mvn clean install -DskipTests
 # 2. Iniciar la API con el perfil 'prod' conectada a NeonDB
 mvn -pl cocos-trading-service spring-boot:run -Dspring-boot.run.profiles=prod
 ```
-*(Opcionalmente, podés sobrescribir las credenciales de conexión mediante las variables de entorno `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`).*
+*(Requiere definir las variables de entorno `DB_URL`, `DB_USERNAME` y `DB_PASSWORD`, sin credenciales hardcodeadas en el repositorio).*
 
 ---
 

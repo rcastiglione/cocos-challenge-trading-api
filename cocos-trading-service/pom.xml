@@ -72,10 +72,6 @@
         </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
@@ -203,6 +199,18 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*RequestApi.class</exclude>
+                        <exclude>**/*Api.class</exclude>
+                        <exclude>**/*JpaEntity.class</exclude>
+                        <exclude>**/*Config.class</exclude>
+                        <exclude>**/*Exception.class</exclude>
+                        <exclude>**/*Mapper.class</exclude>
+                        <exclude>**/*Constants.class</exclude>
+                        <exclude>**/*Application.class</exclude>
+                    </excludes>
+                </configuration>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>

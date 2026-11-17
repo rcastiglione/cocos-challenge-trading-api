@@ -3,16 +3,16 @@ services:
     image: postgres:16-alpine
     container_name: cocos-postgres
     environment:
-      POSTGRES_DB: cocos_trading
-      POSTGRES_USER: cocos_user
-      POSTGRES_PASSWORD: cocos_password
+      POSTGRES_DB: ${POSTGRES_DB:-cocos_trading}
+      POSTGRES_USER: ${POSTGRES_USER:-cocos_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cocos_password}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cocos_user -d cocos_trading"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cocos_user} -d ${POSTGRES_DB:-cocos_trading}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -48,9 +48,9 @@ services:
       SPRING_PROFILES_ACTIVE: local
       DB_HOST: cocos-postgres
       DB_PORT: 5432
-      DB_NAME: cocos_trading
-      DB_USERNAME: cocos_user
-      DB_PASSWORD: cocos_password
+      DB_NAME: ${POSTGRES_DB:-cocos_trading}
+      DB_USERNAME: ${POSTGRES_USER:-cocos_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-cocos_password}
       REDIS_HOST: cocos-redis
       REDIS_PORT: 6379
     ports:
@@ -84,8 +84,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana

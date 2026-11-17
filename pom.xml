@@ -29,12 +29,12 @@
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <springdoc-openapi.version>3.0.3</springdoc-openapi.version>
+        <swagger-annotations.version>2.2.21</swagger-annotations.version>
         <logstash-logback.version>8.1</logstash-logback.version>
         <jacoco.version>0.8.15</jacoco.version>
         <build-helper.version>3.6.0</build-helper.version>
         <testcontainers.version>1.21.1</testcontainers.version>
         <lombok.version>1.18.48</lombok.version>
-        <flyway.version>11.14.1</flyway.version>
     </properties>
 
     <dependencyManagement>
@@ -43,6 +43,11 @@
                 <groupId>com.cocos.trading</groupId>
                 <artifactId>cocos-trading-contract</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>${swagger-annotations.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springdoc</groupId>

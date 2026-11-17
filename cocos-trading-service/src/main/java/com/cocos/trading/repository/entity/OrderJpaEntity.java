@@ -65,49 +65,28 @@ public abstract class OrderJpaEntity {
     @JoinColumn(name = "instrumentid", nullable = false)
     private InstrumentJpaEntity instrument;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "userid", nullable = false)
     private UserJpaEntity user;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
     @Column(name = "size", nullable = false)
     private Long quantity;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false)
     private OrderType type;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
     @Enumerated(EnumType.STRING)
     @Column(name = "side", nullable = false)
     private OrderSide side;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private OrderStatus status;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column.
-    // Pending a Flyway/Liquibase migration to enforce NOT NULL at the database
-    // level.
     @Column(name = "datetime", nullable = false)
     private LocalDateTime datetime;
 

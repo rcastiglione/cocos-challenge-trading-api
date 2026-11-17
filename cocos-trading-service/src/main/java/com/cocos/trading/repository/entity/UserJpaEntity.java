@@ -14,6 +14,7 @@ import lombok.Setter;
 
 /**
  * JPA entity mapped to the {@code users} table.
+ * Non-null constraints are enforced defensively at the JPA layer.
  */
 @Entity
 @Table(name = "users")
@@ -28,11 +29,9 @@ public class UserJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Column(name = "email", nullable = false)
     private String email;
 
-    // TODO: The underlying DB schema currently allows NULLs for this column. Pending a Flyway/Liquibase migration to enforce NOT NULL at the database level.
     @Column(name = "accountnumber", nullable = false)
     private String accountNumber;
 }

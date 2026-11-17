@@ -69,7 +69,7 @@ public class GlobalExceptionHandler {
             return problemResponse(HttpStatus.BAD_REQUEST, new BadRequestProblem(message, Map.of("field", fieldName)));
         }
 
-        log.warn("Malformed JSON request", exception);
+        log.warn("Malformed JSON request: {}", exception.getMessage());
         return problemResponse(
                 HttpStatus.BAD_REQUEST,
                 new BadRequestProblem("Malformed JSON request. Please check the request body format.")
