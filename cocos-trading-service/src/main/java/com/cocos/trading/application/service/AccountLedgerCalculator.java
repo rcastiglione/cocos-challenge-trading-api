@@ -127,30 +127,6 @@ public final class AccountLedgerCalculator {
     }
 
     /**
-     * Calculates the net available cash in ARS from all {@code FILLED} orders of a
-     * user
-     * by summing each order's cash impact via
-     * {@link #calculateCashImpact(OrderJpaEntity)}.
-     *
-     * @param filledOrders Chronological list of {@code FILLED} orders.
-     * @return Net available cash as an {@code ARS} {@link MonetaryAmount}.
-     */
-    public static MonetaryAmount calculateAvailableCash(List<OrderJpaEntity> filledOrders) {
-        MonetaryAmount cash = MonetaryAmount.ZERO_ARS;
-        if (filledOrders == null) {
-            return cash;
-        }
-
-        for (OrderJpaEntity order : filledOrders) {
-            if (order.getQuantity() == null || order.getSide() == null) {
-                continue;
-            }
-            cash = cash.add(calculateCashImpact(order));
-        }
-        return cash;
-    }
-
-    /**
      * Calculates the net quantity of shares currently held by a user for a specific
      * instrument
      * from all {@code FILLED} {@link TradeOrderJpaEntity} instances.

@@ -37,11 +37,6 @@ public class OrderRepositoryAdapter implements OrderRepositoryPort {
     }
 
     @Override
-    public List<OrderJpaEntity> findByUserIdAndStatus(Long userId, OrderStatus status) {
-        return springDataOrderRepository.findByUserIdAndStatusOrderByDatetimeAscIdAsc(userId, status);
-    }
-
-    @Override
     public List<TradeOrderJpaEntity> findTradeOrdersByUserIdAndStatus(Long userId, OrderStatus status) {
         return springDataOrderRepository.findTradeOrdersByUserIdAndStatus(userId, status);
     }

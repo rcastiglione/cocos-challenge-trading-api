@@ -37,27 +37,6 @@ public final class ValidatorUtils {
     }
 
     /**
-     * Rejects a numeric {@link BigDecimal} field if it is less than or equal to zero.
-     *
-     * @param errors         Spring {@link Errors} collector.
-     * @param value          Value to inspect.
-     * @param field          Field name.
-     * @param errorCode      Validation error code.
-     * @param defaultMessage Human-readable error message.
-     */
-    public static void validatePositiveBigDecimal(
-            Errors errors,
-            BigDecimal value,
-            String field,
-            String errorCode,
-            String defaultMessage
-    ) {
-        if (value != null && value.compareTo(BigDecimal.ZERO) <= 0) {
-            errors.rejectValue(field, errorCode, defaultMessage);
-        }
-    }
-
-    /**
      * Validates a {@link MonetaryAmount} field when present: requires a positive {@code amount} ({@code > 0})
      * and an explicit {@code "ARS"} currency code.
      *

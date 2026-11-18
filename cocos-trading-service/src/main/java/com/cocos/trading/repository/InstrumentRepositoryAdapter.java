@@ -5,8 +5,6 @@ import com.cocos.trading.application.port.out.InstrumentRepositoryPort;
 import com.cocos.trading.repository.entity.InstrumentJpaEntity;
 import com.cocos.trading.repository.jpa.InstrumentSpecifications;
 import com.cocos.trading.repository.jpa.SpringDataInstrumentRepository;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -37,14 +35,6 @@ public class InstrumentRepositoryAdapter implements InstrumentRepositoryPort {
             return Optional.empty();
         }
         return springDataInstrumentRepository.findByTicker(ticker.trim().toUpperCase());
-    }
-
-    @Override
-    public List<InstrumentJpaEntity> findAllByIds(Collection<Long> ids) {
-        if (ids == null || ids.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return springDataInstrumentRepository.findAllById(ids);
     }
 
     @Override

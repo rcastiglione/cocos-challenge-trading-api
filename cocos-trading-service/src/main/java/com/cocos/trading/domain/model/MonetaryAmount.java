@@ -103,19 +103,6 @@ public record MonetaryAmount(BigDecimal amount, String currency) {
     }
 
     /**
-     * Multiplies this monetary amount by a {@link BigDecimal} factor.
-     *
-     * @param factor Multiplier factor.
-     * @return Multiplied {@link MonetaryAmount} in the same currency.
-     */
-    public MonetaryAmount multiply(BigDecimal factor) {
-        if (factor == null) {
-            throw new BusinessRuleViolationException("Multiplication factor cannot be null.");
-        }
-        return new MonetaryAmount(this.amount.multiply(factor), this.currency);
-    }
-
-    /**
      * Returns a new {@link MonetaryAmount} with the negated amount and identical currency.
      *
      * @return Negated {@link MonetaryAmount}.

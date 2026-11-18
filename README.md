@@ -23,6 +23,15 @@ docker compose up --build
 - **Swagger UI**: `http://localhost:8080/swagger-ui.html`
 - **Prometheus**: `http://localhost:9090` | **Grafana**: `http://localhost:3000` (`admin` / `admin`)
 
+### Perfil `prod` con NeonDB Remota + Redis Local en Docker
+Tanto el perfil `prod` ([application-prod.yml](cocos-trading-service/src/main/resources/application-prod.yml)) como [docker-compose.prod.yml](docker-compose.prod.yml) vienen preconfigurados con las credenciales de la base remota **NeonDB** para ejecución inmediata *out-of-the-box*. Al levantarlo, ejecuta automáticamente las migraciones de **Flyway** contra NeonDB y levanta un contenedor local de **Redis 7** (`redis:7-alpine`, servicio `redis`) para el *lock* de idempotencia, además de **Prometheus** y **Grafana**:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+```
+
+> **Note for evaluators:** Database credentials for NeonDB have been intentionally hardcoded in the configuration to provide a zero-friction, out-of-the-box evaluation experience.
+
 ### How to Run Tests & Coverage
 
 > **Requisito**: Docker corriendo localmente para Testcontainers (`postgres:16-alpine` + `redis:7-alpine`).
